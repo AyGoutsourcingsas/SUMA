@@ -3,11 +3,11 @@
 // ============================================================
 import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp, Plus, Search, Calendar, DollarSign,
-  ShoppingBag, Trash2, RefreshCw, CheckCircle, Tag
+  TrendingUp, Plus, Search, DollarSign,
+  ShoppingBag, Trash2, RefreshCw, CheckCircle
 } from 'lucide-react';
 import {
-  Button, Card, CardHeader, CardBody, Field, SelectField,
+  Button, Card, Field, SelectField,
   Modal, Badge, EmptyState, Alert, StatCard, Spinner
 } from '@/components/ui';
 import { useAppStore } from '@/store/AppStore';

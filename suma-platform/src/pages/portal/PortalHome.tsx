@@ -6,8 +6,8 @@ import {
   ArrowRight, Users, Package, Calculator, TrendingUp,
   BookOpen, CheckSquare, AlertCircle, Plus,
 } from 'lucide-react';
-import { Card, CardBody, StatCard, Badge } from '@/components/ui';
-import { useAppStore } from '@/store/AppStore';
+import { Card, StatCard, Badge } from '@/components/ui';
+import { useAppStore, useIsSuperAdmin } from '@/store/AppStore';
 import { MODULES_CONFIG, formatCOP, MODULE_STATUS_LABELS, MODULE_STATUS_COLORS } from '@/config/brand';
 import type { ModuleId } from '@/types/domain';
 
@@ -22,26 +22,44 @@ const MODULE_ICONS: Record<ModuleId, React.ReactNode> = {
 
 export default function PortalHome() {
   const { state } = useAppStore();
+  const isSuperAdmin = useIsSuperAdmin();
   const { user, company, modules } = state;
 
-  const activeModules = modules.filter(
-    (m) => m.status === 'activo' || m.status === 'en_prueba'
-  );
-  const inactiveModules = MODULES_CONFIG.filter(
-    (mc) => !modules.some((m) => m.module_id === mc.id && (m.status === 'activo' || m.status === 'en_prueba'))
-  );
+  // Superadmin: todos los módulos del catálogo cuentan como "accesibles"
+  // (revisión/QA). Resto: solo los activos o en prueba de su empresa.
+  const activeModules = isSuperAdmin
+    ? MODULES_CONFIG.map((mc) => ({
+        id: mc.id,
+        module_id: mc.id,
+        name: mc.name,
+        status: 'activo' as const,
+      }))
+    : modules.filter((m) => m.status === 'activo' || m.status === 'en_prueba');
+
+  const inactiveModules = isSuperAdmin
+    ? []
+    : MODULES_CONFIG.filter(
+        (mc) => !modules.some((m) => m.module_id === mc.id && (m.status === 'activo' || m.status === 'en_prueba'))
+      );
 
   return (
     <div className="page-container">
       {/* Welcome */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          ¡Hola, {user?.name?.split(' ')[0] ?? 'Usuario'}! 👋
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            ¡Hola, {user?.name?.split(' ')[0] ?? 'Usuario'}! 👋
+          </h1>
+          {isSuperAdmin && <Badge variant="purple">Superadmin SUMA</Badge>}
+        </div>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
-          Empresa: <strong className="text-gray-700 dark:text-gray-300">
-            {company?.commercial_name ?? company?.name ?? 'Sin empresa asignada'}
-          </strong>
+          {isSuperAdmin ? (
+            <>Modo revisión: tienes acceso a <strong className="text-gray-700 dark:text-gray-300">todos los módulos</strong> para verificar cómo va quedando cada uno.</>
+          ) : (
+            <>Empresa: <strong className="text-gray-700 dark:text-gray-300">
+              {company?.commercial_name ?? company?.name ?? 'Sin empresa asignada'}
+            </strong></>
+          )}
         </p>
       </div>
 

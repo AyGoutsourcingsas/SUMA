@@ -4,13 +4,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ShieldCheck, Search, Filter, RefreshCw, CheckCircle,
-  XCircle, Clock, Eye, AlertCircle, Building2, CreditCard,
-  Layers, ArrowLeft
+  Search, RefreshCw,
+  Clock, Eye, Building2, CreditCard,
+  ArrowLeft
 } from 'lucide-react';
 import {
-  Button, Card, CardHeader, CardBody, Badge, Modal,
-  Alert, StatCard, Spinner
+  Button, Card, Badge, Modal,
+  StatCard, Spinner
 } from '@/components/ui';
 import { supabase } from '@/services/supabase';
 import { formatCOP, APP_STATUS_LABELS } from '@/config/brand';

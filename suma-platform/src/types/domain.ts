@@ -2,7 +2,9 @@
 // SUMA Platform — Tipos de dominio
 // ============================================================
 
-export type RoleCode = 'owner' | 'admin' | 'user';
+// superadmin = perfil SUMA (acceso total a todas las empresas y módulos)
+// owner/admin = jefe de la empresa cliente · user = perfil de tareas
+export type RoleCode = 'superadmin' | 'owner' | 'admin' | 'user';
 export type UserStatus = 'Activo' | 'Invitado' | 'Suspendido';
 export type CompanyModuleStatus = 'activo' | 'en_prueba' | 'suspendido' | 'pendiente' | 'no_contratado';
 export type BillingPeriod = 'mensual' | 'trimestral' | 'anual';

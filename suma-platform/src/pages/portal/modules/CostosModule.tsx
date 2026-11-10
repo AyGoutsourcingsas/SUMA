@@ -4,14 +4,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   Calculator, Plus, Search, Edit2, Trash2, Upload,
-  Eye, Save, RefreshCw, FileText, ArrowRight, DollarSign,
-  TrendingUp, Layers, CheckCircle, Package
+  Eye, Save, RefreshCw, FileText, TrendingUp, Package
 } from 'lucide-react';
 import {
-  Button, Card, CardHeader, CardBody, Field, SelectField,
+  Button, Card, Field,
   Modal, Badge, EmptyState, Alert, StatCard, Spinner
 } from '@/components/ui';
-import { useAppStore } from '@/store/AppStore';
+import { useAppStore, useCanEdit, useIsSuperAdmin } from '@/store/AppStore';
 import { formatCOP, formatPercent, calcMinSalePrice, calcIngredientCost } from '@/config/brand';
 import {
   fetchRecipes, createRecipe, updateRecipe, deleteRecipe,
@@ -19,7 +18,7 @@ import {
 } from '@/services/supabaseDataProvider';
 import { MOCK_RECIPES, MOCK_INVENTORY_ITEMS } from '@/data/mocks';
 import { ExcelImporterModal } from '@/components/costos/ExcelImporterModal';
-import type { Recipe, RecipeIngredient, InventoryItem } from '@/types/domain';
+import type { Recipe, InventoryItem } from '@/types/domain';
 
 interface IngredientRow {
   inventory_item_id?: string;
@@ -31,6 +30,8 @@ interface IngredientRow {
 
 export default function CostosModule() {
   const { state } = useAppStore();
+  const canEdit = useCanEdit();      // superadmin/admin/owner pueden crear/editar/borrar/importar
+  const isSuperAdmin = useIsSuperAdmin();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -236,29 +237,34 @@ export default function CostosModule() {
           <div className="flex items-center gap-3 mb-1">
             <Calculator className="w-6 h-6 text-suma-600" />
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Costos & Recetas</h1>
+            {isSuperAdmin && <Badge variant="purple">Revisión SUMA</Badge>}
             {isDemo && <Badge variant="yellow">Modo demo</Badge>}
           </div>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
             Estandariza fichas técnicas, calcula el costo exacto por insumo y define tu precio mínimo de venta según tu margen deseado.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowImporterModal(true)}
-            leftIcon={<Upload className="w-4 h-4" />}
-          >
-            Importar Insumos (Excel/CSV)
-          </Button>
-          <Button
-            size="sm"
-            onClick={openNewRecipeModal}
-            leftIcon={<Plus className="w-4 h-4" />}
-          >
-            Nueva Receta
-          </Button>
-        </div>
+        {canEdit ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowImporterModal(true)}
+              leftIcon={<Upload className="w-4 h-4" />}
+            >
+              Importar Insumos (Excel/CSV)
+            </Button>
+            <Button
+              size="sm"
+              onClick={openNewRecipeModal}
+              leftIcon={<Plus className="w-4 h-4" />}
+            >
+              Nueva Receta
+            </Button>
+          </div>
+        ) : (
+          <Badge variant="gray">Solo lectura — tu perfil ejecuta tareas</Badge>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -318,16 +324,22 @@ export default function CostosModule() {
           <EmptyState
             icon={<Calculator className="w-12 h-12" />}
             title="Sin fichas técnicas o recetas"
-            description="Empieza creando la ficha técnica de un producto o importa tus insumos desde tu Excel."
+            description={
+              canEdit
+                ? 'Empieza creando la ficha técnica de un producto o importa tus insumos desde tu Excel.'
+                : 'Aún no hay recetas registradas. Tu perfil puede consultarlas cuando el administrador las cree.'
+            }
             action={
-              <div className="flex gap-2">
-                <Button onClick={() => setShowImporterModal(true)} variant="secondary" leftIcon={<Upload className="w-4 h-4" />}>
-                  Importar Excel
-                </Button>
-                <Button onClick={openNewRecipeModal} leftIcon={<Plus className="w-4 h-4" />}>
-                  Crear primera receta
-                </Button>
-              </div>
+              canEdit ? (
+                <div className="flex gap-2">
+                  <Button onClick={() => setShowImporterModal(true)} variant="secondary" leftIcon={<Upload className="w-4 h-4" />}>
+                    Importar Excel
+                  </Button>
+                  <Button onClick={openNewRecipeModal} leftIcon={<Plus className="w-4 h-4" />}>
+                    Crear primera receta
+                  </Button>
+                </div>
+              ) : undefined
             }
           />
         ) : (
@@ -378,20 +390,24 @@ export default function CostosModule() {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button
-                            title="Editar Receta"
-                            onClick={() => openEditRecipeModal(r)}
-                            className="p-1.5 text-gray-400 hover:text-suma-600 hover:bg-suma-50 dark:hover:bg-suma-950 rounded-lg transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            title="Eliminar Receta"
-                            onClick={() => setDeletingRecipe(r)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {canEdit && (
+                            <>
+                              <button
+                                title="Editar Receta"
+                                onClick={() => openEditRecipeModal(r)}
+                                className="p-1.5 text-gray-400 hover:text-suma-600 hover:bg-suma-50 dark:hover:bg-suma-950 rounded-lg transition-colors"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                title="Eliminar Receta"
+                                onClick={() => setDeletingRecipe(r)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
