@@ -1,0 +1,62 @@
+/* ============================================================
+   SUMA Platform — Estilos globales
+   ============================================================ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-white dark:bg-gray-950 text-gray-900 dark:text-white;
+  }
+
+  /* Scrollbar personalizado */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 dark:bg-gray-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400 dark:bg-gray-600;
+  }
+}
+
+@layer components {
+  /* Tabla base */
+  .suma-table {
+    @apply w-full text-sm text-left;
+  }
+  .suma-table thead tr {
+    @apply bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700;
+  }
+  .suma-table thead th {
+    @apply px-4 py-3 font-semibold text-gray-700 dark:text-gray-300 text-xs uppercase tracking-wide;
+  }
+  .suma-table tbody tr {
+    @apply border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors;
+  }
+  .suma-table tbody td {
+    @apply px-4 py-3 text-gray-700 dark:text-gray-300;
+  }
+
+  /* Página con padding estándar */
+  .page-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+  }
+
+  /* Sección con gradiente hero */
+  .hero-gradient {
+    background: linear-gradient(135deg, #4f56e5 0%, #6272f1 50%, #8196f8 100%);
+  }
+}
