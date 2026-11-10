@@ -54,47 +54,63 @@ export default function App() {
   // Inicializar sesión al montar
   useEffect(() => {
     const initSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session;
 
-      if (session?.user) {
-        try {
-          const [user, company, modules] = await Promise.all([
-            getCurrentUser(),
-            getCurrentCompany(),
-            getCompanyModules(),
-          ]);
-          dispatch({ type: 'SET_USER', payload: user });
-          dispatch({ type: 'SET_COMPANY', payload: company });
-          dispatch({ type: 'SET_MODULES', payload: modules });
-        } catch {
-          dispatch({ type: 'RESET' });
+        if (session?.user) {
+          try {
+            const [user, company, modules] = await Promise.all([
+              getCurrentUser(),
+              getCurrentCompany(),
+              getCompanyModules(),
+            ]);
+            dispatch({ type: 'SET_USER', payload: user });
+            dispatch({ type: 'SET_COMPANY', payload: company });
+            dispatch({ type: 'SET_MODULES', payload: modules });
+          } catch {
+            dispatch({ type: 'RESET' });
+          }
         }
+      } catch (err) {
+        console.warn('Error al verificar sesión:', err);
+      } finally {
+        dispatch({ type: 'SET_LOADING', payload: false });
       }
-
-      dispatch({ type: 'SET_LOADING', payload: false });
     };
 
     initSession();
 
-    // Escuchar cambios de auth
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          const [user, company, modules] = await Promise.all([
-            getCurrentUser(),
-            getCurrentCompany(),
-            getCompanyModules(),
-          ]);
-          dispatch({ type: 'SET_USER', payload: user });
-          dispatch({ type: 'SET_COMPANY', payload: company });
-          dispatch({ type: 'SET_MODULES', payload: modules });
-        } else if (event === 'SIGNED_OUT') {
-          dispatch({ type: 'RESET' });
+    let subscription: { unsubscribe: () => void } | null = null;
+    try {
+      const res = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (event === 'SIGNED_IN' && session) {
+            try {
+              const [user, company, modules] = await Promise.all([
+                getCurrentUser(),
+                getCurrentCompany(),
+                getCompanyModules(),
+              ]);
+              dispatch({ type: 'SET_USER', payload: user });
+              dispatch({ type: 'SET_COMPANY', payload: company });
+              dispatch({ type: 'SET_MODULES', payload: modules });
+            } catch {
+              // fallback demo
+            }
+          } else if (event === 'SIGNED_OUT') {
+            dispatch({ type: 'RESET' });
+          }
         }
-      }
-    );
+      );
+      subscription = res.data?.subscription ?? null;
+    } catch {
+      // Ignorar si auth listener no está listo
+    }
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, [dispatch]);
 
   if (state.isLoading) return <LoadingScreen />;
