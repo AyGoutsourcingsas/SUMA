@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Calculator, Plus, Search, Edit2, Trash2, Eye, Save,
-  RefreshCw, FolderPlus, Folder, FileText, X,
+  RefreshCw, FolderPlus, Folder, FileText, X, LineChart,
 } from 'lucide-react';
 import {
   Button, Card, Field, SelectField, Modal, Badge,
@@ -20,6 +20,7 @@ import {
   deleteRecipe, computeRecipe,
   type RecipeRecord, type RecipeLineInput, type PriceMode,
 } from '@/services/modules/costos';
+import { CostSimulatorModal } from './CostSimulatorModal';
 import type { ItemGroup, Material, Unit } from '@/types/domain';
 
 export default function CostosModule() {
@@ -46,6 +47,7 @@ export default function CostosModule() {
   const [editingRecipe, setEditingRecipe] = useState<RecipeRecord | null>(null);
   const [viewingRecipe, setViewingRecipe] = useState<RecipeRecord | null>(null);
   const [deletingRecipe, setDeletingRecipe] = useState<RecipeRecord | null>(null);
+  const [showSimulator, setShowSimulator] = useState(false);
 
   const loadAll = async () => {
     setLoading(true);
@@ -131,6 +133,9 @@ export default function CostosModule() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowSimulator(true)} leftIcon={<LineChart className="w-4 h-4" />}>
+            Simulador de costos
+          </Button>
           <Button variant="secondary" size="sm" onClick={loadAll} leftIcon={<RefreshCw className="w-4 h-4" />}>
             Actualizar
           </Button>
@@ -317,6 +322,16 @@ export default function CostosModule() {
           }}
         />
       )}
+
+      {/* Modal: simulador de costos */}
+      <CostSimulatorModal
+        isOpen={showSimulator}
+        onClose={() => setShowSimulator(false)}
+        recipes={recipes}
+        materials={materials}
+        units={units}
+        groups={groups}
+      />
 
       {/* Modal: ver ficha */}
       <Modal isOpen={!!viewingRecipe} onClose={() => setViewingRecipe(null)} title={viewingRecipe?.product || 'Ficha'} size="xl">
