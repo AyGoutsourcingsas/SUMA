@@ -248,3 +248,70 @@ export async function fetchMovements(filters: MovementFilters = {}): Promise<Inv
   if (error) throw error;
   return (data ?? []) as InventoryMovement[];
 }
+
+// ─────────────────────────────────────────
+// Política de costeo e historial (migración 008)
+// ─────────────────────────────────────────
+export type CostPolicy = 'ULTIMA_COMPRA' | 'PROMEDIO' | 'CONGELADO' | 'PROYECTADO';
+
+export const COST_POLICY_LABEL: Record<CostPolicy, string> = {
+  ULTIMA_COMPRA: 'Última compra (precio nuevo)',
+  PROMEDIO: 'Promedio ponderado',
+  CONGELADO: 'Congelado (precio anterior)',
+  PROYECTADO: 'Proyectado (precio a futuro)',
+};
+
+/** Lee la política de costeo de la empresa (parámetro costeo_politica). */
+export async function fetchCostPolicy(companyId: string): Promise<CostPolicy> {
+  const { data } = await supabase
+    .from('company_parameters')
+    .select('value')
+    .eq('company_id', companyId)
+    .eq('key', 'costeo_politica')
+    .maybeSingle();
+  return (data?.value as CostPolicy) ?? 'ULTIMA_COMPRA';
+}
+
+/** Cambia la política de la empresa y recalcula todas las recetas. */
+export async function setCostPolicy(companyId: string, policy: CostPolicy): Promise<void> {
+  const { error } = await supabase
+    .from('company_parameters')
+    .update({ value: policy })
+    .eq('company_id', companyId)
+    .eq('key', 'costeo_politica');
+  if (error) throw error;
+  // recalcular recetas con la nueva política
+  await supabase.rpc('recompute_all_recipes', { p_company_id: companyId });
+}
+
+/** Actualiza el costo proyectado o congelado (manual) de un material. */
+export async function setMaterialCostOverrides(
+  id: string,
+  overrides: { projected_cost?: number | null; frozen_cost?: number | null },
+): Promise<void> {
+  const { error } = await supabase.from('materials').update(overrides).eq('id', id);
+  if (error) throw error;
+}
+
+export interface CostHistoryRow {
+  id: string;
+  company_id: string;
+  material_id: string;
+  old_cost: number | null;
+  new_cost: number;
+  change_kind: string;
+  note: string | null;
+  changed_at: string;
+}
+
+/** Historial de cambios de costo (opcionalmente de un material). */
+export async function fetchCostHistory(materialId?: string): Promise<CostHistoryRow[]> {
+  let q = supabase
+    .from('material_cost_history')
+    .select('*')
+    .order('changed_at', { ascending: false });
+  if (materialId) q = q.eq('material_id', materialId);
+  const { data, error } = await q.limit(1000);
+  if (error) throw error;
+  return (data ?? []) as CostHistoryRow[];
+}
