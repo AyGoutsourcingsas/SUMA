@@ -412,7 +412,11 @@ function CompanySwitcher() {
       if (!state.company && list.length > 0) {
         const savedId = localStorage.getItem('suma-active-company');
         const chosen = list.find((c) => c.id === savedId) ?? list[0];
+        localStorage.setItem('suma-active-company', chosen.id); // persistir siempre
         dispatch({ type: 'SET_COMPANY', payload: chosen });
+      } else if (state.company) {
+        // asegurar que localStorage refleje la empresa activa
+        localStorage.setItem('suma-active-company', state.company.id);
       }
     });
     return () => { cancelled = true; };

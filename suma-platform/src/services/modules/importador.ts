@@ -44,12 +44,20 @@ export async function importTemplate(
   const summary: ImportSummary = { insumos: 0, depreciacion: 0, recetas: 0, productos: 0, errores: [] };
 
   // ── Catálogos actuales (para resolver por nombre) ──
-  const [{ data: groupsData }, { data: suppliersData }, { data: materialsData }, { data: locsData }] = await Promise.all([
+  const [gRes, sRes, mRes, lRes] = await Promise.all([
     supabase.from('item_groups').select('id,name,kind').eq('kind', 'material'),
     supabase.from('suppliers').select('id,name'),
     supabase.from('materials').select('id,name'),
     supabase.from('locations').select('id,is_default'),
   ]);
+  // Si falla la lectura de catálogos (sesión/RLS), reportarlo claro.
+  const firstErr = gRes.error || sRes.error || mRes.error || lRes.error;
+  if (firstErr) {
+    summary.errores.push({ hoja: 'General', fila: 0, motivo: `No se pudieron leer los catálogos: ${firstErr.message}` });
+    return summary;
+  }
+  const groupsData = gRes.data; const suppliersData = sRes.data;
+  const materialsData = mRes.data; const locsData = lRes.data;
   const groupByName = new Map((groupsData ?? []).map((g: any) => [g.name.toLowerCase(), g.id]));
   const supplierByName = new Map((suppliersData ?? []).map((x: any) => [x.name.toLowerCase(), x.id]));
   const materialByName = new Map((materialsData ?? []).map((m: any) => [m.name.toLowerCase(), m.id]));
