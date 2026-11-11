@@ -315,3 +315,61 @@ export async function fetchCostHistory(materialId?: string): Promise<CostHistory
   if (error) throw error;
   return (data ?? []) as CostHistoryRow[];
 }
+
+// ─────────────────────────────────────────
+// Dashboard de proveedores (migración 009)
+// ─────────────────────────────────────────
+export interface SupplierSpend {
+  company_id: string;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  num_compras: number;
+  gasto_total: number;
+  ticket_promedio: number;
+  ultima_compra: string | null;
+  insumos_distintos: number;
+}
+
+export interface SupplierSpendMonthly {
+  company_id: string;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  mes: string;
+  num_compras: number;
+  gasto_mes: number;
+}
+
+export interface SupplierPriceVariation {
+  company_id: string;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  material_id: string;
+  material_name: string | null;
+  first_cost: number;
+  last_cost: number;
+  variacion_abs: number;
+  variacion_pct: number;
+  first_date: string;
+  last_date: string;
+}
+
+export async function fetchSupplierSpend(): Promise<SupplierSpend[]> {
+  const { data, error } = await supabase
+    .from('supplier_spend').select('*').order('gasto_total', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as SupplierSpend[];
+}
+
+export async function fetchSupplierSpendMonthly(): Promise<SupplierSpendMonthly[]> {
+  const { data, error } = await supabase
+    .from('supplier_spend_monthly').select('*').order('mes');
+  if (error) throw error;
+  return (data ?? []) as SupplierSpendMonthly[];
+}
+
+export async function fetchSupplierPriceVariation(): Promise<SupplierPriceVariation[]> {
+  const { data, error } = await supabase
+    .from('supplier_price_variation').select('*').order('variacion_pct', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as SupplierPriceVariation[];
+}

@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Package, Plus, Search, RefreshCw, FolderPlus, Folder, X,
   ShoppingCart, SlidersHorizontal, ListFilter, Boxes, Building2,
-  AlertTriangle, Save, FileText, History, Download, Settings2,
+  AlertTriangle, Save, FileText, History, Download, Settings2, Users,
 } from 'lucide-react';
 import {
   Button, Card, Field, SelectField, Modal, Badge, EmptyState, Alert, Spinner, StatCard,
@@ -24,9 +24,10 @@ import {
   type CostPolicy, type CostHistoryRow,
 } from '@/services/modules/inventario';
 import { downloadAsExcel } from '@/lib/excelExport';
+import { ProveedoresDashboard } from './ProveedoresDashboard';
 import type { ItemGroup, Supplier, Unit, Material } from '@/types/domain';
 
-type Tab = 'stock' | 'movimientos' | 'costos';
+type Tab = 'stock' | 'movimientos' | 'costos' | 'proveedores';
 
 const STATUS_BADGE: Record<StockStatus, 'green' | 'yellow' | 'red'> = {
   OK: 'green', REPONER: 'yellow', AGOTADO: 'red',
@@ -188,9 +189,12 @@ export default function InventariosModule() {
         <TabButton active={tab === 'stock'} onClick={() => setTab('stock')} icon={<Boxes className="w-4 h-4" />} label="Stock" />
         <TabButton active={tab === 'movimientos'} onClick={() => setTab('movimientos')} icon={<ListFilter className="w-4 h-4" />} label="Movimientos (kárdex)" />
         <TabButton active={tab === 'costos'} onClick={() => setTab('costos')} icon={<Settings2 className="w-4 h-4" />} label="Costos & política" />
+        <TabButton active={tab === 'proveedores'} onClick={() => setTab('proveedores')} icon={<Users className="w-4 h-4" />} label="Proveedores" />
       </div>
 
-      {tab === 'costos' ? (
+      {tab === 'proveedores' ? (
+        <ProveedoresDashboard />
+      ) : tab === 'costos' ? (
         <CostPolicyPanel
           policy={costPolicy}
           materials={materials}
