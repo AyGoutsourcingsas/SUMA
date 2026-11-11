@@ -78,12 +78,15 @@ export function TemplateImporterModal({
         recetas: sRecetas ? readSheet(wb, sRecetas) : [],
         productos: sProductos ? readSheet(wb, sProductos) : [],
       });
+      // NO llamamos onDone() aquí: recargaría el módulo padre y remontaría
+      // este modal, perdiendo el resumen. El refresco se hace al cerrar.
       setSummary(res);
-      onDone();
     } catch (e) {
       // Mostrar el detalle real (de Supabase o del parseo) para diagnosticar
-      const msg = (e as any)?.message || (e as any)?.error_description || JSON.stringify(e);
-      setError(`Error al importar: ${msg}`);
+      const err = e as any;
+      const msg = err?.message || err?.error_description || err?.details || err?.hint
+        || (typeof err === 'string' ? err : JSON.stringify(err));
+      setError(`Error al importar: ${msg || 'desconocido'}`);
     } finally {
       setLoading(false);
       if (inputRef.current) inputRef.current.value = ''; // permite re-subir el mismo archivo
@@ -91,7 +94,8 @@ export function TemplateImporterModal({
   };
 
   const reset = () => { setSummary(null); setError(null); setFileName(''); if (inputRef.current) inputRef.current.value = ''; };
-  const close = () => { onClose(); reset(); };
+  // Al cerrar, recargamos el módulo padre (si hubo importación) y reseteamos.
+  const close = () => { if (summary) onDone(); onClose(); reset(); };
 
   return (
     <Modal isOpen={isOpen} onClose={close} title="Importar plantilla SUMA (.xlsx)" size="lg">
