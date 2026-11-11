@@ -43,12 +43,44 @@ export async function getCurrentUser(): Promise<CompanyUser | null> {
   return data;
 }
 
+/**
+ * Empresa del usuario autenticado.
+ * - Usuario normal: su empresa (via company_users.company_id).
+ * - Superadmin: puede no tener empresa propia; devuelve null sin romper
+ *   (el superadmin elige una "empresa activa" en la UI).
+ */
 export async function getCurrentCompany(): Promise<Company | null> {
-  const { data } = await supabase
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // 1) empresa asignada al usuario en company_users
+  const { data: cu } = await supabase
+    .from('company_users')
+    .select('company_id')
+    .eq('auth_id', user.id)
+    .maybeSingle();
+
+  if (cu?.company_id) {
+    const { data } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('id', cu.company_id)
+      .maybeSingle();
+    return data ?? null;
+  }
+
+  // 2) sin empresa asignada (típico superadmin): no romper.
+  return null;
+}
+
+/** Lista de empresas visibles (para el selector del superadmin). */
+export async function listCompanies(): Promise<Company[]> {
+  const { data, error } = await supabase
     .from('companies')
     .select('*')
-    .single();
-  return data;
+    .order('name');
+  if (error) return [];
+  return data ?? [];
 }
 
 export async function getCompanyModules(): Promise<CompanyModule[]> {
