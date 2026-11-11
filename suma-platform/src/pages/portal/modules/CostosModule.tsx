@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Calculator, Plus, Search, Edit2, Trash2, Eye, Save,
-  RefreshCw, FolderPlus, Folder, FileText, X, LineChart, Download,
+  RefreshCw, FolderPlus, Folder, FileText, X, LineChart, Download, Upload,
 } from 'lucide-react';
 import {
   Button, Card, Field, SelectField, Modal, Badge,
@@ -21,6 +21,7 @@ import {
   type RecipeRecord, type RecipeLineInput, type PriceMode,
 } from '@/services/modules/costos';
 import { CostSimulatorModal } from './CostSimulatorModal';
+import { TemplateImporterModal } from '@/components/costos/TemplateImporterModal';
 import { downloadPlantillaSUMA } from '@/lib/plantillaImportacion';
 import type { ItemGroup, Material, Unit } from '@/types/domain';
 
@@ -49,6 +50,7 @@ export default function CostosModule() {
   const [viewingRecipe, setViewingRecipe] = useState<RecipeRecord | null>(null);
   const [deletingRecipe, setDeletingRecipe] = useState<RecipeRecord | null>(null);
   const [showSimulator, setShowSimulator] = useState(false);
+  const [showTemplateImporter, setShowTemplateImporter] = useState(false);
 
   const loadAll = async () => {
     setLoading(true);
@@ -136,6 +138,11 @@ export default function CostosModule() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {canEdit && (
+            <Button variant="secondary" size="sm" onClick={() => setShowTemplateImporter(true)} leftIcon={<Upload className="w-4 h-4" />}>
+              Importar plantilla
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => downloadPlantillaSUMA()} leftIcon={<Download className="w-4 h-4" />}>
             Descargar plantilla
           </Button>
@@ -337,6 +344,13 @@ export default function CostosModule() {
         materials={materials}
         units={units}
         groups={groups}
+      />
+
+      {/* Modal: importar plantilla completa */}
+      <TemplateImporterModal
+        isOpen={showTemplateImporter}
+        onClose={() => setShowTemplateImporter(false)}
+        onDone={loadAll}
       />
 
       {/* Modal: ver ficha */}
