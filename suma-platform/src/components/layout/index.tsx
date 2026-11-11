@@ -2,7 +2,7 @@
 // SUMA Platform — Layout público
 // ============================================================
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Menu, X, Moon, Sun } from 'lucide-react';
 import { Logo, Button } from '@/components/ui';
 import { useAppStore } from '@/store/AppStore';
@@ -179,10 +179,10 @@ import {
   LogOut, Bell, Building2,
 } from 'lucide-react';
 import { useAppStore as _useAppStore, useIsSuperAdmin, useRoleLabel } from '@/store/AppStore';
-import { signOut } from '@/services/auth';
+import { signOut, listCompanies } from '@/services/auth';
 import { useNavigate } from 'react-router-dom';
 import { MODULES_CONFIG } from '@/config/brand';
-import type { ModuleId } from '@/types/domain';
+import type { ModuleId, Company } from '@/types/domain';
 
 const MODULE_ICONS: Record<ModuleId, React.ReactNode> = {
   rrhh: <Users className="w-5 h-5" />,
@@ -321,6 +321,9 @@ export function PortalLayout() {
             <Menu className="w-5 h-5" />
           </button>
 
+          {/* Selector de empresa activa (solo superadmin) */}
+          {isSuperAdmin && <CompanySwitcher />}
+
           <div className="flex-1" />
 
           <button
@@ -388,5 +391,53 @@ function NavItem({
       <span className="flex-shrink-0">{icon}</span>
       {!collapsed && <span className="truncate">{label}</span>}
     </Link>
+  );
+}
+
+// ─────────────────────────────────────────
+// Selector de empresa activa (solo superadmin)
+// El superadmin no tiene empresa propia: elige en cuál trabajar.
+// Guarda la elección en el AppStore (state.company) y en localStorage.
+// ─────────────────────────────────────────
+function CompanySwitcher() {
+  const { state, dispatch } = _useAppStore();
+  const [companies, setCompanies] = useState<Company[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listCompanies().then((list) => {
+      if (cancelled) return;
+      setCompanies(list);
+      // Restaurar la última empresa elegida si no hay una activa
+      if (!state.company && list.length > 0) {
+        const savedId = localStorage.getItem('suma-active-company');
+        const chosen = list.find((c) => c.id === savedId) ?? list[0];
+        dispatch({ type: 'SET_COMPANY', payload: chosen });
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (companies.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2">
+      <Building2 className="w-4 h-4 text-suma-500" />
+      <select
+        value={state.company?.id ?? ''}
+        onChange={(e) => {
+          const c = companies.find((x) => x.id === e.target.value) ?? null;
+          if (c) localStorage.setItem('suma-active-company', c.id);
+          dispatch({ type: 'SET_COMPANY', payload: c });
+        }}
+        className="max-w-[200px] px-2 py-1.5 rounded-lg border border-suma-300 dark:border-suma-700 text-sm bg-suma-50 dark:bg-suma-950 text-suma-800 dark:text-suma-200 font-medium focus:outline-none focus:ring-2 focus:ring-suma-500"
+        title="Empresa activa (superadmin)"
+      >
+        {companies.map((c) => (
+          <option key={c.id} value={c.id}>{c.commercial_name ?? c.name}</option>
+        ))}
+      </select>
+    </div>
   );
 }
