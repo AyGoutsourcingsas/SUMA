@@ -129,18 +129,18 @@ export async function downloadPlantillaSUMA(): Promise<void> {
 
   addStyledSheet(wb, {
     name: 'Recetas', color: COLORS.recetas,
-    note: 'RECETAS (sub-recetas y piezas) · Una fila por INGREDIENTE. Repite el nombre de la receta en cada ingrediente. Tipo: INSUMO / DEPRECIACION / RECETA. Desde la fila 4.',
-    headers: ['Receta', 'Rinde cantidad', 'Rinde unidad', 'Margen seguridad %', 'Ingrediente', 'Tipo ingrediente', 'Cantidad', 'Unidad'],
-    example: ['Cera Azul', 1000, 'Ml', 10, 'Cera de Soya APF', 'INSUMO', 1000, 'Gr'],
-    widths: [20, 14, 12, 18, 28, 16, 10, 10],
+    note: 'RECETAS (sub-recetas y piezas) · Dale un CÓDIGO único a cada receta y repítelo en sus ingredientes (evita confusiones). Tipo: INSUMO / DEPRECIACION / RECETA (otra receta por su código). Desde la fila 4.',
+    headers: ['Codigo receta', 'Receta', 'Rinde cantidad', 'Rinde unidad', 'Margen seguridad %', 'Ingrediente', 'Tipo ingrediente', 'Cantidad', 'Unidad'],
+    example: ['CERA-AZUL', 'Cera Azul', 1000, 'Ml', 10, 'Cera de Soya APF', 'INSUMO', 1000, 'Gr'],
+    widths: [16, 20, 13, 12, 16, 28, 16, 10, 10],
   });
 
   addStyledSheet(wb, {
     name: 'Productos', color: COLORS.productos,
-    note: 'PRODUCTOS (final que vendes) · Una fila por COMPONENTE. Repite el nombre del producto. Tipo: RECETA / INSUMO. Margen = ganancia que quieres. Desde la fila 4.',
-    headers: ['Producto', 'Margen ganancia %', 'Comision pago %', 'Componente', 'Tipo componente', 'Unidades'],
-    example: ['Colección Ohana', 50, 0, 'Stitch Ohana', 'RECETA', 4],
-    widths: [24, 16, 14, 24, 16, 10],
+    note: 'PRODUCTOS (final que vendes) · Dale un CÓDIGO único al producto y repítelo en sus componentes. En "Componente" usa el CÓDIGO de la receta/insumo. Tipo: RECETA / INSUMO. Desde la fila 4.',
+    headers: ['Codigo producto', 'Producto', 'Margen ganancia %', 'Comision pago %', 'Componente', 'Tipo componente', 'Unidades'],
+    example: ['GUA-COL', 'Colección Guardianes del Bosque', 55, 0, 'HOLLIN-GB', 'RECETA', 8],
+    widths: [16, 28, 16, 14, 20, 16, 10],
   });
 
   // Descargar
