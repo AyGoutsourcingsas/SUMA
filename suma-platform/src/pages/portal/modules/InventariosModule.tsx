@@ -109,7 +109,6 @@ export default function InventariosModule() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
   const [deleting, setDeleting] = useState<InventoryItem | null>(null);
-  const [error, setError] = useState('');
   const [isDemo, setIsDemo] = useState(false);
 
   const loadItems = async () => {

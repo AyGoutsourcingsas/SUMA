@@ -67,8 +67,6 @@ export default function ModuleWorkspace() {
       return <StubModule name="RRHH" />;
     case 'productividad':
       return <StubModule name="Productividad" />;
-    case 'contabilidad':
-      return <StubModule name="Contabilidad" />;
     default:
       return <ModuleNotFound />;
   }

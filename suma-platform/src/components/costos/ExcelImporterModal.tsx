@@ -8,7 +8,6 @@ import { Button, Modal, Alert, Badge } from '@/components/ui';
 import { formatCOP } from '@/config/brand';
 import { upsertInventoryItems } from '@/services/supabaseDataProvider';
 import { useAppStore } from '@/store/AppStore';
-import type { InventoryItem } from '@/types/domain';
 
 interface Props {
   isOpen: boolean;
@@ -40,7 +39,6 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<'upload' | 'mapping' | 'preview'>('upload');
-  const [fileName, setFileName] = useState('');
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
@@ -62,7 +60,6 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
 
   const resetState = () => {
     setStep('upload');
-    setFileName('');
     setSheetNames([]);
     setSelectedSheet('');
     setWorkbook(null);
@@ -86,7 +83,6 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
     if (!file) return;
 
     setError(null);
-    setFileName(file.name);
 
     const reader = new FileReader();
     reader.onload = (evt) => {

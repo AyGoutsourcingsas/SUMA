@@ -5,7 +5,7 @@
 export const BRAND = {
   name: 'SUMA',
   tagline: 'La plataforma empresarial para pymes colombianas',
-  description: 'Gestiona tu empresa con módulos independientes: RRHH, Contabilidad, Inventarios, Costos y más.',
+  description: 'Gestiona tu empresa con módulos independientes: RRHH, Productividad, Inventarios, Costos, Ventas y más.',
   email: 'hola@sumaplataforma.co',
   phone: '+57 (1) 000-0000',
   website: 'https://sumaplataforma.co',
@@ -54,24 +54,6 @@ export const MODULES_CONFIG = [
       'Seguimiento de proyectos',
       'Reportes de productividad',
       'Metas y OKRs',
-    ],
-  },
-  {
-    id: 'contabilidad' as const,
-    name: 'Contabilidad',
-    fullName: 'Contabilidad',
-    description: 'Registros contables, cuentas y estados financieros.',
-    icon: 'BookOpen',
-    color: 'purple',
-    price_monthly: 99000,
-    price_quarterly: 279000,
-    price_annual: 990000,
-    features: [
-      'Plan de cuentas',
-      'Registros contables',
-      'Cuentas por pagar y cobrar',
-      'Estados financieros',
-      'Conciliación bancaria',
     ],
   },
   {

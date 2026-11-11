@@ -50,8 +50,8 @@ export default function Login() {
           </div>
           <h1 className="text-4xl font-bold mb-4">Bienvenido a SUMA</h1>
           <p className="text-blue-100 text-lg">
-            Tu plataforma empresarial modular para gestionar RRHH, Contabilidad,
-            Inventarios, Costos y más desde un solo lugar.
+            Tu plataforma empresarial modular para gestionar RRHH, Productividad,
+            Inventarios, Costos y Ventas desde un solo lugar.
           </p>
           <div className="mt-8 space-y-3">
             {['Multi-empresa con RLS', 'Módulos independientes', 'Hecho para Colombia'].map((f) => (
