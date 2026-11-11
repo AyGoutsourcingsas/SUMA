@@ -217,6 +217,7 @@ export interface ItemGroup {
   kind: ItemGroupKind;
   parent_id?: string | null;
   sort_order: number;
+  description?: string | null;
   created_at: string;
 }
 

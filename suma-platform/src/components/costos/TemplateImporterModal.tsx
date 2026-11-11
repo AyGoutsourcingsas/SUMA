@@ -4,15 +4,13 @@
 // toma la fila 3 como encabezados (salta nota y ejemplo) y carga
 // todo con importTemplate(). Muestra resumen y errores.
 // ============================================================
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { UploadCloud, CheckCircle, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { Modal, Button, Alert, Spinner } from '@/components/ui';
-import { useAppStore } from '@/store/AppStore';
+import { useActiveCompanyId } from '@/store/AppStore';
 import { importTemplate, type RawRow, type ImportSummary } from '@/services/modules/importador';
 
-// Lee una hoja usando la fila `headerRow` (1-based) como encabezados
-// y devuelve las filas siguientes como objetos. Salta la fila de ejemplo.
 function readSheet(wb: XLSX.WorkBook, sheetName: string, headerRow = 3): RawRow[] {
   const ws = wb.Sheets[sheetName];
   if (!ws) return [];
@@ -30,7 +28,6 @@ function readSheet(wb: XLSX.WorkBook, sheetName: string, headerRow = 3): RawRow[
   return rows;
 }
 
-// Encuentra el nombre real de la hoja (ignora mayúsculas/acentos)
 function findSheet(wb: XLSX.WorkBook, target: string): string | null {
   const norm = (x: string) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   return wb.SheetNames.find((n) => norm(n).includes(norm(target))) ?? null;
@@ -43,18 +40,22 @@ export function TemplateImporterModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const { state } = useAppStore();
-  // Empresa activa: del estado, o del localStorage como respaldo (robusto
-  // ante desfases de carga del selector de empresa del superadmin).
-  const companyId = state.company?.id ?? localStorage.getItem('suma-active-company') ?? '';
+  const activeCompanyId = useActiveCompanyId();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [fileName, setFileName] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
-    setError(null); setSummary(null);
-    if (!companyId) { setError('Selecciona una empresa activa en la barra superior antes de importar.'); return; }
+    setError(null);
+    setSummary(null);
+    // Leer company_id FRESCO al momento de ejecutar (no del closure)
+    const companyId = activeCompanyId || localStorage.getItem('suma-active-company') || '';
+    if (!companyId) {
+      setError('No hay empresa activa. Elige una empresa en el selector de la barra superior y vuelve a intentar.');
+      return;
+    }
     setFileName(file.name);
     setLoading(true);
     try {
@@ -66,9 +67,8 @@ export function TemplateImporterModal({
       const sRecetas = findSheet(wb, 'receta');
       const sProductos = findSheet(wb, 'producto');
 
-      if (!sInsumos && !sRecetas) {
-        setError('No se encontraron las hojas del template (Insumos, Recetas...). Usa la plantilla oficial de SUMA.');
-        setLoading(false);
+      if (!sInsumos && !sRecetas && !sProductos) {
+        setError(`No se encontraron las hojas del template. Hojas del archivo: ${wb.SheetNames.join(', ')}. Usa la plantilla oficial de SUMA.`);
         return;
       }
 
@@ -81,46 +81,39 @@ export function TemplateImporterModal({
       setSummary(res);
       onDone();
     } catch (e) {
-      setError((e as Error).message || 'No se pudo procesar el archivo.');
+      // Mostrar el detalle real (de Supabase o del parseo) para diagnosticar
+      const msg = (e as any)?.message || (e as any)?.error_description || JSON.stringify(e);
+      setError(`Error al importar: ${msg}`);
     } finally {
       setLoading(false);
+      if (inputRef.current) inputRef.current.value = ''; // permite re-subir el mismo archivo
     }
   };
 
-  const reset = () => { setSummary(null); setError(null); setFileName(''); };
+  const reset = () => { setSummary(null); setError(null); setFileName(''); if (inputRef.current) inputRef.current.value = ''; };
+  const close = () => { onClose(); reset(); };
 
   return (
-    <Modal isOpen={isOpen} onClose={() => { onClose(); reset(); }} title="Importar plantilla SUMA (.xlsx)" size="lg">
+    <Modal isOpen={isOpen} onClose={close} title="Importar plantilla SUMA (.xlsx)" size="lg">
       <div className="p-6 space-y-4">
+        {/* El error SIEMPRE visible y prominente */}
         {error && <Alert type="error">{error}</Alert>}
 
-        {!summary && !loading && (
-          <>
-            <div className="rounded-lg border border-suma-200 bg-suma-50 dark:border-suma-500/30 dark:bg-suma-500/10 p-3 text-sm text-suma-700 dark:text-suma-300">
-              Sube la <strong>plantilla oficial de SUMA</strong> ya llena (hojas Insumos, Depreciacion, Recetas, Productos).
-              El sistema lee la fila 3 como títulos y tus datos desde la fila 4. Puedes descargarla con el botón “Descargar plantilla”.
-            </div>
-            <label className="block border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-10 text-center cursor-pointer hover:border-suma-500 transition-colors">
-              <FileSpreadsheet className="w-14 h-14 text-suma-600 mx-auto mb-3" />
-              <span className="block font-semibold text-gray-900 dark:text-white mb-1">Selecciona tu archivo .xlsx</span>
-              <span className="block text-sm text-gray-500 mb-4">Insumos · Depreciación · Recetas · Productos</span>
-              <span className="inline-flex items-center gap-2 bg-suma-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                <UploadCloud className="w-4 h-4" /> Examinar
-              </span>
-              <input type="file" accept=".xlsx,.xls" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-            </label>
-          </>
-        )}
+        {/* input oculto SIEMPRE montado (no se pierde entre estados) */}
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        />
 
-        {loading && (
+        {loading ? (
           <div className="py-12 text-center">
             <Spinner size="lg" />
             <p className="mt-3 text-sm text-gray-500">Procesando {fileName}… Esto puede tardar unos segundos.</p>
           </div>
-        )}
-
-        {summary && (
+        ) : summary ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-green-600">
               <CheckCircle className="w-5 h-5" />
@@ -149,9 +142,28 @@ export function TemplateImporterModal({
             )}
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={reset}>Importar otro</Button>
-              <Button onClick={() => { onClose(); reset(); }}>Listo</Button>
+              <Button onClick={close}>Listo</Button>
             </div>
           </div>
+        ) : (
+          <>
+            <div className="rounded-lg border border-suma-200 bg-suma-50 dark:border-suma-500/30 dark:bg-suma-500/10 p-3 text-sm text-suma-700 dark:text-suma-300">
+              Sube la <strong>plantilla oficial de SUMA</strong> ya llena (hojas Insumos, Depreciacion, Recetas, Productos).
+              El sistema lee la fila 3 como títulos y tus datos desde la fila 4.
+            </div>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="w-full block border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-10 text-center cursor-pointer hover:border-suma-500 transition-colors"
+            >
+              <FileSpreadsheet className="w-14 h-14 text-suma-600 mx-auto mb-3" />
+              <span className="block font-semibold text-gray-900 dark:text-white mb-1">Selecciona tu archivo .xlsx</span>
+              <span className="block text-sm text-gray-500 mb-4">Insumos · Depreciación · Recetas · Productos</span>
+              <span className="inline-flex items-center gap-2 bg-suma-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <UploadCloud className="w-4 h-4" /> Examinar
+              </span>
+            </button>
+          </>
         )}
       </div>
     </Modal>

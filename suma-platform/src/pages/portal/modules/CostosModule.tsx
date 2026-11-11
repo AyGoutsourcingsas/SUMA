@@ -44,6 +44,7 @@ export default function CostosModule() {
   // Modales
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDesc, setNewGroupDesc] = useState('');
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<RecipeRecord | null>(null);
   const [viewingRecipe, setViewingRecipe] = useState<RecipeRecord | null>(null);
@@ -92,8 +93,8 @@ export default function CostosModule() {
     if (!newGroupName.trim()) { setError('Escribe un nombre para la carpeta.'); return; }
     if (!companyId) { setError('Selecciona una empresa activa en la barra superior antes de crear carpetas.'); return; }
     try {
-      await createGroup(companyId, newGroupName.trim(), 'recipe');
-      setNewGroupName('');
+      await createGroup(companyId, newGroupName.trim(), 'recipe', null, newGroupDesc.trim() || null);
+      setNewGroupName(''); setNewGroupDesc('');
       setShowGroupModal(false);
       const g = await fetchGroups('recipe');
       setGroups(g);
@@ -311,6 +312,16 @@ export default function CostosModule() {
       <Modal isOpen={showGroupModal} onClose={() => setShowGroupModal(false)} title="Nueva carpeta" size="sm">
         <div className="p-6 space-y-4">
           <Field label="Nombre de la carpeta" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="Ej. Platos fuertes, Postres..." />
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción (opcional)</span>
+            <textarea
+              value={newGroupDesc}
+              onChange={(e) => setNewGroupDesc(e.target.value)}
+              placeholder="¿Qué contiene esta carpeta? Ej. Recetas de la colección Guardianes del Bosque."
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
+            />
+          </label>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowGroupModal(false)}>Cancelar</Button>
             <Button onClick={handleCreateGroup} leftIcon={<FolderPlus className="w-4 h-4" />}>Crear carpeta</Button>
