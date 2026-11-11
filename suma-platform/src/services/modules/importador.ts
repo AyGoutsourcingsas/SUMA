@@ -19,6 +19,14 @@ export interface ImportSummary {
 }
 
 const s = (v: unknown) => (v == null ? '' : String(v).trim());
+
+/** Genera un código legible y estable desde un nombre (slug en MAYÚSCULAS). */
+function slugCode(name: string): string {
+  return name
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // sin acentos
+    .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    .slice(0, 24) || 'REC';
+}
 const num = (v: unknown) => {
   if (v == null || v === '') return 0;
   const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.,-]/g, '').replace(/\./g, '').replace(',', '.'));
@@ -144,7 +152,7 @@ export async function importTemplate(
       const { data, error } = await supabase.from('recipes').insert({
         company_id: companyId,
         product: s(first['Receta']) || key,
-        code: s(first['Codigo receta']) || null,
+        code: s(first['Codigo receta']) || slugCode(s(first['Receta']) || key),
         yield_qty: num(first['Rinde cantidad']) || 1,
         yield_unit: s(first['Rinde unidad']) || 'Und',
         margin: (num(first['Margen seguridad %']) || 0) / 100,
@@ -202,7 +210,7 @@ export async function importTemplate(
         const { data, error } = await supabase.from('recipes').insert({
           company_id: companyId,
           product: s(first['Producto']) || key,
-          code: s(first['Codigo producto']) || null,
+          code: s(first['Codigo producto']) || slugCode(s(first['Producto']) || key),
           yield_qty: 1, yield_unit: 'Und',
           margin: (num(first['Margen ganancia %']) || 0) / 100,
           gateway_fee_pct: (num(first['Comision pago %']) || 0) / 100,

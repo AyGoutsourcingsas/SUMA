@@ -12,7 +12,7 @@ import {
   Button, Card, Field, SelectField, Modal, Badge,
   EmptyState, Alert, Spinner,
 } from '@/components/ui';
-import { useAppStore, useCanEdit, useIsSuperAdmin } from '@/store/AppStore';
+import { useActiveCompanyId, useCanEdit, useIsSuperAdmin } from '@/store/AppStore';
 import { formatCOP, formatPercent } from '@/config/brand';
 import {
   fetchUnits, fetchGroups, createGroup, deleteGroup,
@@ -26,10 +26,9 @@ import { downloadPlantillaSUMA } from '@/lib/plantillaImportacion';
 import type { ItemGroup, Material, Unit } from '@/types/domain';
 
 export default function CostosModule() {
-  const { state } = useAppStore();
   const canEdit = useCanEdit();
   const isSuperAdmin = useIsSuperAdmin();
-  const companyId = state.company?.id ?? '';
+  const companyId = useActiveCompanyId();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

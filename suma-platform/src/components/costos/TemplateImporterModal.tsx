@@ -44,7 +44,9 @@ export function TemplateImporterModal({
   onDone: () => void;
 }) {
   const { state } = useAppStore();
-  const companyId = state.company?.id ?? '';
+  // Empresa activa: del estado, o del localStorage como respaldo (robusto
+  // ante desfases de carga del selector de empresa del superadmin).
+  const companyId = state.company?.id ?? localStorage.getItem('suma-active-company') ?? '';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);

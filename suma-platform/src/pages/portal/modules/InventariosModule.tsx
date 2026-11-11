@@ -12,7 +12,7 @@ import {
 import {
   Button, Card, Field, SelectField, Modal, Badge, EmptyState, Alert, Spinner, StatCard,
 } from '@/components/ui';
-import { useAppStore, useCanEdit, useIsSuperAdmin } from '@/store/AppStore';
+import { useActiveCompanyId, useCanEdit, useIsSuperAdmin } from '@/store/AppStore';
 import { formatCOP } from '@/config/brand';
 import {
   fetchUnits, fetchGroups, createGroup, deleteGroup, fetchSuppliers, createSupplier,
@@ -44,10 +44,9 @@ const MOVEMENT_LABEL: Record<MovementType, string> = {
 };
 
 export default function InventariosModule() {
-  const { state } = useAppStore();
   const canEdit = useCanEdit();
   const isSuperAdmin = useIsSuperAdmin();
-  const companyId = state.company?.id ?? '';
+  const companyId = useActiveCompanyId();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
