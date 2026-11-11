@@ -4,7 +4,7 @@
 import { Link } from 'react-router-dom';
 import {
   ArrowRight, CheckCircle, Users, Package, Calculator,
-  BookOpen, CheckSquare, TrendingUp, Shield, Zap, Globe,
+  CheckSquare, TrendingUp, Shield, Zap, Globe,
 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { MODULES_CONFIG, formatCOP } from '@/config/brand';
@@ -30,7 +30,6 @@ const FEATURES = [
 const MODULE_ICONS_MAP: Record<string, React.ReactNode> = {
   rrhh: <Users className="w-6 h-6" />,
   productividad: <CheckSquare className="w-6 h-6" />,
-  contabilidad: <BookOpen className="w-6 h-6" />,
   inventarios: <Package className="w-6 h-6" />,
   costos: <Calculator className="w-6 h-6" />,
   ventas: <TrendingUp className="w-6 h-6" />,
@@ -60,7 +59,7 @@ export default function Home() {
           </h1>
           <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
             Plataforma modular todo-en-uno. Contrata solo lo que necesitas:
-            RRHH, Contabilidad, Inventarios, Costos y más. Desde{' '}
+            RRHH, Productividad, Inventarios, Costos y Ventas. Desde{' '}
             <strong className="text-white">{formatCOP(69000)}/mes</strong> por módulo.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

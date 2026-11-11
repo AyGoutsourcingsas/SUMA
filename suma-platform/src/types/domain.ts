@@ -13,7 +13,7 @@ export type ApplicationStatus =
   | 'en_revision' | 'requiere_correccion' | 'aprobada' | 'rechazada'
   | 'cuenta_creada' | 'activa';
 
-export type ModuleId = 'rrhh' | 'productividad' | 'contabilidad' | 'inventarios' | 'costos' | 'ventas';
+export type ModuleId = 'rrhh' | 'productividad' | 'inventarios' | 'costos' | 'ventas';
 
 // ─────────────────────────────────────────
 // Entidades base
@@ -187,4 +187,115 @@ export interface AppSession {
   company: Company | null;
   modules: CompanyModule[];
   isLoading: boolean;
+}
+
+// ============================================================
+// NÚCLEO ERP (migración 003) — datos maestros compartidos
+// Base de los módulos Costos, Inventario y Ventas.
+// ============================================================
+
+export type UnitDimension = 'peso' | 'volumen' | 'conteo' | 'longitud';
+
+export interface Unit {
+  id: string;
+  company_id: string;
+  code: string;          // 'Gr', 'Kg', 'Ml', 'Und'...
+  name?: string;
+  dimension: UnitDimension;
+  base_code: string;     // unidad base de su dimensión
+  factor: number;        // cuántas unidades base = 1 de esta unidad
+  created_at: string;
+}
+
+export type ItemGroupKind = 'material' | 'recipe';
+
+/** Grupo / carpeta para organizar materiales (inventario) o recetas (costos). */
+export interface ItemGroup {
+  id: string;
+  company_id: string;
+  name: string;
+  kind: ItemGroupKind;
+  parent_id?: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface Supplier {
+  id: string;
+  company_id: string;
+  name: string;
+  contact?: string;
+  phone?: string;
+  created_at: string;
+}
+
+export type ParameterValueType = 'number' | 'percent' | 'text' | 'bool';
+
+export interface CompanyParameter {
+  id: string;
+  company_id: string;
+  key: string;
+  value?: string;
+  value_type: ParameterValueType;
+  label?: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Material / insumo / empaque. Su costo por unidad base sale de las compras. */
+export interface Material {
+  id: string;
+  company_id: string;
+  code?: string;
+  name: string;
+  group_id?: string | null;
+  base_unit: string;
+  unit_cost_per_base: number;
+  supplier_id?: string | null;
+  units_per_purchase?: number | null;
+  stock_min: number;
+  is_active: boolean;
+  note?: string;
+  custom_fields: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Purchase {
+  id: string;
+  company_id: string;
+  material_id: string;
+  purchased_at: string;
+  quantity: number;      // en unidad base
+  total_cost: number;    // valor pagado
+  unit_cost: number;     // calculado = total_cost / quantity
+  supplier_id?: string | null;
+  note?: string;
+  affects_stock: boolean;
+  voided: boolean;
+  created_at: string;
+}
+
+export interface Product {
+  id: string;
+  company_id: string;
+  code?: string;
+  name: string;
+  group_id?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ModuleSessionMode = 'editor' | 'lector';
+
+export interface ModuleSession {
+  id: string;
+  company_id: string;
+  module_id: string;
+  user_auth_id: string;
+  mode: ModuleSessionMode;
+  last_seen: string;
+  created_at: string;
 }

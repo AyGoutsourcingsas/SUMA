@@ -119,7 +119,7 @@ function PublicFooter() {
           <div>
             <h4 className="text-white font-semibold mb-3 text-sm">Plataforma</h4>
             <ul className="space-y-2 text-sm">
-              {['RRHH', 'Productividad', 'Contabilidad', 'Inventarios', 'Costos'].map((m) => (
+              {['RRHH', 'Productividad', 'Inventarios', 'Costos', 'Ventas'].map((m) => (
                 <li key={m}>
                   <Link to="/servicios" className="hover:text-white transition-colors">{m}</Link>
                 </li>
@@ -174,7 +174,7 @@ export function PublicLayout() {
 // Portal Layout (autenticado)
 // ─────────────────────────────────────────
 import {
-  LayoutDashboard, Users, CheckSquare, BookOpen,
+  LayoutDashboard, Users, CheckSquare,
   Package, Calculator, TrendingUp, Settings,
   LogOut, Bell, Building2,
 } from 'lucide-react';
@@ -187,7 +187,6 @@ import type { ModuleId } from '@/types/domain';
 const MODULE_ICONS: Record<ModuleId, React.ReactNode> = {
   rrhh: <Users className="w-5 h-5" />,
   productividad: <CheckSquare className="w-5 h-5" />,
-  contabilidad: <BookOpen className="w-5 h-5" />,
   inventarios: <Package className="w-5 h-5" />,
   costos: <Calculator className="w-5 h-5" />,
   ventas: <TrendingUp className="w-5 h-5" />,
@@ -196,7 +195,6 @@ const MODULE_ICONS: Record<ModuleId, React.ReactNode> = {
 const MODULE_NAMES: Record<ModuleId, string> = {
   rrhh: 'RRHH',
   productividad: 'Productividad',
-  contabilidad: 'Contabilidad',
   inventarios: 'Inventarios',
   costos: 'Costos',
   ventas: 'Ventas',
