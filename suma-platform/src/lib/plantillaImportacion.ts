@@ -91,24 +91,40 @@ export async function downloadPlantillaSUMA(): Promise<void> {
   t.font = { bold: true, size: 14, color: { argb: COLORS.titleText } };
   const rows: [string, string][] = [
     ['', ''],
-    ['Llena las hojas en este orden:', ''],
-    ['1) Insumos', 'Tu base madre: cada materia prima o empaque con su costo por unidad.'],
-    ['2) Depreciacion', 'Herramientas y moldes que se reparten por uso o por tiempo.'],
-    ['3) Recetas', 'Sub-recetas y piezas. Una receta puede usar insumos, depreciación u OTRAS recetas.'],
-    ['4) Productos', 'El producto final que vendes: junta recetas/insumos por sus unidades.'],
+    ['LLENA LAS HOJAS EN ESTE ORDEN', ''],
+    ['1) Insumos', 'Tu base madre: cada materia prima o empaque que COMPRAS, con su costo por unidad.'],
+    ['2) Depreciacion', 'Herramientas y moldes que NO se gastan de una vez (olla, molde, impresora). Se reparten.'],
+    ['3) Recetas', 'Lo que FABRICAS: sub-recetas (ej. cera de color) y piezas. Pueden usar insumos, depreciación u otras recetas.'],
+    ['4) Productos', 'Lo que VENDES: junta recetas/insumos por sus unidades (ej. una colección con 4 piezas + empaque).'],
     ['', ''],
-    ['Reglas:', ''],
+    ['QUÉ ESCRIBIR EN CADA TIPO (columna "Tipo")', ''],
+    ['INSUMO', 'El ingrediente existe en la hoja Insumos (lo compras). Ej: Cera de Soya, Papel. Se cobra por su costo.'],
+    ['DEPRECIACION', 'El ingrediente existe en la hoja Depreciacion (herramienta/molde). Ej: Molde Stitch, Guillotina. Se cobra por uso.'],
+    ['RECETA', 'El ingrediente es OTRA receta que fabricas. Ej: en Stitch usas "Cera Azul" (que es una receta). Pon su CÓDIGO.'],
+    ['', ''],
+    ['EJEMPLO DE CASCADA (así se conecta todo)', ''],
+    ['Paso 1', 'En Insumos: "Cera de Soya APF" a $20/Gr.'],
+    ['Paso 2', 'En Recetas: "Cera Azul" (código CERA-AZUL) usa 1000 Gr de Cera de Soya (tipo INSUMO) + colorante.'],
+    ['Paso 3', 'En Recetas: "Stitch" usa 14 Ml de Cera Azul (tipo RECETA, código CERA-AZUL) + su molde (DEPRECIACION).'],
+    ['Paso 4', 'En Productos: "Colección Ohana" usa 4 unidades de Stitch (tipo RECETA) + empaque (INSUMO).'],
+    ['', ''],
+    ['REGLAS', ''],
     ['•', 'En cada hoja: fila 1 = nota, fila 2 = ejemplo (puedes borrarla), fila 3 = títulos, desde la fila 4 escribes.'],
     ['•', 'No cambies los títulos (fila 3) ni el orden de las columnas.'],
-    ['•', 'El NOMBRE conecta todo: un insumo o receta se referencia por su nombre exacto.'],
-    ['•', 'Unidades válidas: Gr, Kg, Ml, Lt, Und, Mt.'],
+    ['•', 'CÓDIGO de receta/producto: ponlo igual en todas las filas de esa receta. Si lo dejas vacío, SUMA lo crea del nombre.'],
+    ['•', 'El nombre/código conecta todo: escríbelo EXACTAMENTE igual donde lo referencias.'],
+    ['•', 'Unidades válidas: Gr, Kg, Ml, Lt, Und, Mt. SUMA convierte sola (ej. compras en Kg, usas en Gr).'],
+    ['•', 'Margen seguridad % (recetas) = recargo sobre el costo. Margen ganancia % (productos) = lo que quieres ganar.'],
   ];
   rows.forEach(([a, b], i) => {
     const row = intro.getRow(i + 2);
     row.getCell(1).value = a;
     row.getCell(2).value = b;
-    if (a.startsWith('Llena') || a.startsWith('Reglas')) row.getCell(1).font = { bold: true, color: { argb: COLORS.titleText } };
-    if (/^\d\)/.test(a)) row.getCell(1).font = { bold: true };
+    const isHeader = a === a.toUpperCase() && a.length > 4 && !a.startsWith('•') && b === '';
+    if (isHeader) row.getCell(1).font = { bold: true, size: 12, color: { argb: COLORS.titleText } };
+    if (/^\d\)/.test(a) || ['INSUMO', 'DEPRECIACION', 'RECETA', 'Paso 1', 'Paso 2', 'Paso 3', 'Paso 4'].includes(a)) {
+      row.getCell(1).font = { bold: true };
+    }
   });
 
   addStyledSheet(wb, {
@@ -129,7 +145,7 @@ export async function downloadPlantillaSUMA(): Promise<void> {
 
   addStyledSheet(wb, {
     name: 'Recetas', color: COLORS.recetas,
-    note: 'RECETAS (sub-recetas y piezas) · Dale un CÓDIGO único a cada receta y repítelo en sus ingredientes (evita confusiones). Tipo: INSUMO / DEPRECIACION / RECETA (otra receta por su código). Desde la fila 4.',
+    note: 'RECETAS · Repite el mismo CÓDIGO en todas las filas de una receta. El código es OPCIONAL: si lo dejas vacío el sistema lo genera del nombre. Tipo: INSUMO (de Insumos) / DEPRECIACION (de Depreciacion) / RECETA (otra receta, por su código). Desde la fila 4.',
     headers: ['Codigo receta', 'Receta', 'Rinde cantidad', 'Rinde unidad', 'Margen seguridad %', 'Ingrediente', 'Tipo ingrediente', 'Cantidad', 'Unidad'],
     example: ['CERA-AZUL', 'Cera Azul', 1000, 'Ml', 10, 'Cera de Soya APF', 'INSUMO', 1000, 'Gr'],
     widths: [16, 20, 13, 12, 16, 28, 16, 10, 10],
@@ -137,7 +153,7 @@ export async function downloadPlantillaSUMA(): Promise<void> {
 
   addStyledSheet(wb, {
     name: 'Productos', color: COLORS.productos,
-    note: 'PRODUCTOS (final que vendes) · Dale un CÓDIGO único al producto y repítelo en sus componentes. En "Componente" usa el CÓDIGO de la receta/insumo. Tipo: RECETA / INSUMO. Desde la fila 4.',
+    note: 'PRODUCTOS (lo que vendes) · Repite el mismo CÓDIGO en las filas del producto (opcional, se autogenera si lo dejas vacío). En "Componente" pon el CÓDIGO (o nombre) de la receta/insumo. Tipo: RECETA / INSUMO. Desde la fila 4.',
     headers: ['Codigo producto', 'Producto', 'Margen ganancia %', 'Comision pago %', 'Componente', 'Tipo componente', 'Unidades'],
     example: ['GUA-COL', 'Colección Guardianes del Bosque', 55, 0, 'HOLLIN-GB', 'RECETA', 8],
     widths: [16, 28, 16, 14, 20, 16, 10],

@@ -136,6 +136,16 @@ export function useHasModule(moduleId: string) {
   );
 }
 
+/**
+ * ID de la empresa activa. Usa state.company; si aún no cargó (desfase
+ * del selector del superadmin), cae al valor guardado en localStorage.
+ * Evita el falso "selecciona una empresa" cuando sí hay una elegida.
+ */
+export function useActiveCompanyId(): string {
+  const { state } = useAppStore();
+  return state.company?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('suma-active-company') ?? '' : '');
+}
+
 /** Etiqueta legible del perfil actual. */
 export function useRoleLabel() {
   const { state } = useAppStore();
