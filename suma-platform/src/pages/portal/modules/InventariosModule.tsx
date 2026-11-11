@@ -73,8 +73,11 @@ export default function InventariosModule() {
   // Modales
   const [showGroup, setShowGroup] = useState(false);
   const [newGroup, setNewGroup] = useState('');
+  const [groupError, setGroupError] = useState<string | null>(null);
+  const [savingGroup, setSavingGroup] = useState(false);
   const [showLocation, setShowLocation] = useState(false);
   const [newLocation, setNewLocation] = useState('');
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [showMaterial, setShowMaterial] = useState(false);
   const [showPurchase, setShowPurchase] = useState(false);
   const [showAdjust, setShowAdjust] = useState(false);
@@ -332,22 +335,58 @@ export default function InventariosModule() {
       )}
 
       {/* ─── Modales ─── */}
-      <Modal isOpen={showGroup} onClose={() => setShowGroup(false)} title="Nuevo grupo" size="sm">
+      <Modal isOpen={showGroup} onClose={() => { setShowGroup(false); setGroupError(null); }} title="Nuevo grupo" size="sm">
         <div className="p-6 space-y-4">
+          {groupError && <Alert type="error">{groupError}</Alert>}
           <Field label="Nombre del grupo" value={newGroup} onChange={(e) => setNewGroup(e.target.value)} placeholder="Ej. Lácteos, Empaques..." />
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setShowGroup(false)}>Cancelar</Button>
-            <Button onClick={async () => { if (newGroup.trim()) { await createGroup(companyId, newGroup.trim()); setNewGroup(''); setShowGroup(false); setGroups(await fetchGroups()); } }} leftIcon={<FolderPlus className="w-4 h-4" />}>Crear</Button>
+            <Button variant="secondary" onClick={() => { setShowGroup(false); setGroupError(null); }}>Cancelar</Button>
+            <Button
+              loading={savingGroup}
+              onClick={async () => {
+                setGroupError(null);
+                if (!newGroup.trim()) { setGroupError('Escribe un nombre para el grupo.'); return; }
+                if (!companyId) { setGroupError('Selecciona una empresa activa en la barra superior antes de crear grupos.'); return; }
+                setSavingGroup(true);
+                try {
+                  await createGroup(companyId, newGroup.trim());
+                  setNewGroup('');
+                  setShowGroup(false);
+                  setGroups(await fetchGroups());
+                } catch (e) {
+                  setGroupError((e as Error).message || 'No se pudo crear el grupo.');
+                } finally {
+                  setSavingGroup(false);
+                }
+              }}
+              leftIcon={<FolderPlus className="w-4 h-4" />}
+            >Crear</Button>
           </div>
         </div>
       </Modal>
 
-      <Modal isOpen={showLocation} onClose={() => setShowLocation(false)} title="Nueva sede / bodega" size="sm">
+      <Modal isOpen={showLocation} onClose={() => { setShowLocation(false); setLocationError(null); }} title="Nueva sede / bodega" size="sm">
         <div className="p-6 space-y-4">
+          {locationError && <Alert type="error">{locationError}</Alert>}
           <Field label="Nombre de la sede" value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="Ej. Bodega Norte" />
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setShowLocation(false)}>Cancelar</Button>
-            <Button onClick={async () => { if (newLocation.trim()) { await createLocation(companyId, newLocation.trim()); setNewLocation(''); setShowLocation(false); setLocations(await fetchLocations()); } }} leftIcon={<Plus className="w-4 h-4" />}>Crear sede</Button>
+            <Button variant="secondary" onClick={() => { setShowLocation(false); setLocationError(null); }}>Cancelar</Button>
+            <Button
+              onClick={async () => {
+                setLocationError(null);
+                if (!newLocation.trim()) { setLocationError('Escribe un nombre para la sede.'); return; }
+                if (!companyId) { setLocationError('Selecciona una empresa activa en la barra superior.'); return; }
+                try {
+                  await createLocation(companyId, newLocation.trim());
+                  setNewLocation('');
+                  setShowLocation(false);
+                  setLocations(await fetchLocations());
+                } catch (e) {
+                  setLocationError((e as Error).message || 'No se pudo crear la sede.');
+                }
+              }}
+              leftIcon={<Plus className="w-4 h-4" />}
+            >Crear sede</Button>
           </div>
         </div>
       </Modal>

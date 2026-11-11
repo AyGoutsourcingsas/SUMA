@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Calculator, Plus, Search, Edit2, Trash2, Eye, Save,
-  RefreshCw, FolderPlus, Folder, FileText, X, LineChart,
+  RefreshCw, FolderPlus, Folder, FileText, X, LineChart, Download,
 } from 'lucide-react';
 import {
   Button, Card, Field, SelectField, Modal, Badge,
@@ -21,6 +21,7 @@ import {
   type RecipeRecord, type RecipeLineInput, type PriceMode,
 } from '@/services/modules/costos';
 import { CostSimulatorModal } from './CostSimulatorModal';
+import { downloadPlantillaSUMA } from '@/lib/plantillaImportacion';
 import type { ItemGroup, Material, Unit } from '@/types/domain';
 
 export default function CostosModule() {
@@ -87,15 +88,17 @@ export default function CostosModule() {
   }, [recipes, activeGroup, search]);
 
   const handleCreateGroup = async () => {
-    if (!newGroupName.trim() || !companyId) return;
+    if (!newGroupName.trim()) { setError('Escribe un nombre para la carpeta.'); return; }
+    if (!companyId) { setError('Selecciona una empresa activa en la barra superior antes de crear carpetas.'); return; }
     try {
       await createGroup(companyId, newGroupName.trim(), 'recipe');
       setNewGroupName('');
       setShowGroupModal(false);
       const g = await fetchGroups('recipe');
       setGroups(g);
-    } catch {
-      setError('No se pudo crear la carpeta.');
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message || 'No se pudo crear la carpeta.');
     }
   };
 
@@ -133,6 +136,9 @@ export default function CostosModule() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => downloadPlantillaSUMA()} leftIcon={<Download className="w-4 h-4" />}>
+            Descargar plantilla
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => setShowSimulator(true)} leftIcon={<LineChart className="w-4 h-4" />}>
             Simulador de costos
           </Button>
