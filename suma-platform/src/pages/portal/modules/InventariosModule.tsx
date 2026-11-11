@@ -1,339 +1,546 @@
 // ============================================================
-// SUMA Platform — Módulo Inventarios
+// SUMA ERP — Módulo INVENTARIO (sedes, grupos, stock, kárdex)
+// Multiempresa -> sedes -> grupos -> materiales. Stock por
+// movimientos (kárdex). Alimenta el costo de las recetas (Costos).
 // ============================================================
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Package, Plus, Search, Edit2, Trash2,
-  AlertTriangle, Save, RefreshCw,
+  Package, Plus, Search, RefreshCw, FolderPlus, Folder, X,
+  ShoppingCart, SlidersHorizontal, ListFilter, Boxes, Building2,
+  AlertTriangle, Save, FileText,
 } from 'lucide-react';
 import {
-  Button, Card, Field, SelectField,
-  Modal, Badge, EmptyState, Alert, StatCard, Spinner,
+  Button, Card, Field, SelectField, Modal, Badge, EmptyState, Alert, Spinner, StatCard,
 } from '@/components/ui';
-import { useAppStore } from '@/store/AppStore';
+import { useAppStore, useCanEdit, useIsSuperAdmin } from '@/store/AppStore';
 import { formatCOP } from '@/config/brand';
 import {
-  fetchInventoryItems, createInventoryItem,
-  updateInventoryItem, deleteInventoryItem,
-} from '@/services/supabaseDataProvider';
-import { MOCK_INVENTORY_ITEMS } from '@/data/mocks';
-import type { InventoryItem } from '@/types/domain';
+  fetchUnits, fetchGroups, createGroup, deleteGroup, fetchSuppliers, createSupplier,
+  fetchLocations, createLocation, fetchMaterials, createMaterial,
+  fetchStockSummary, createPurchase, createAdjustment, fetchMovements,
+  type StockRow, type StockStatus, type Location, type InventoryMovement, type MovementType,
+} from '@/services/modules/inventario';
+import type { ItemGroup, Supplier, Unit, Material } from '@/types/domain';
 
-const UNITS = ['Gr', 'Ml', 'Kg', 'Lt', 'Lb', 'Und', 'Mt', 'Gt'];
-const GROUPS = ['CERA', 'FRAGANCIAS', 'COLORANTES', 'MOLDES', 'EMPAQUES', 'ETIQUETAS Y PAPELERÍA', 'MATERIALES', 'ASEO', 'PEBETEROS', 'Otro'];
+type Tab = 'stock' | 'movimientos';
 
-function ItemForm({
-  initial,
-  onSave,
-  onCancel,
-}: {
-  initial?: Partial<InventoryItem>;
-  onSave: (item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [form, setForm] = useState({
-    sku: initial?.sku ?? '',
-    name: initial?.name ?? '',
-    base_unit: initial?.base_unit ?? 'Gr',
-    unit_cost_per_base: initial?.unit_cost_per_base ?? 0,
-    group_name: initial?.group_name ?? '',
-    supplier: initial?.supplier ?? '',
-    stock: initial?.stock ?? 0,
-    stock_min: initial?.stock_min ?? 0,
-    company_id: initial?.company_id ?? '',
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const { state } = useAppStore();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name || !form.base_unit) {
-      setError('Nombre y unidad base son obligatorios.');
-      return;
-    }
-    setLoading(true);
-    try {
-      await onSave({ ...form, company_id: state.company?.id ?? '' });
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="p-6 space-y-4">
-      {error && <Alert type="error">{error}</Alert>}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="CER-SOY-001" />
-        <Field label="Nombre del insumo" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Cera de Soya APF" />
-        <SelectField label="Unidad base" required value={form.base_unit} onChange={(e) => setForm({ ...form, base_unit: e.target.value })}>
-          {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-        </SelectField>
-        <Field
-          label="Costo por unidad base (COP)"
-          type="number"
-          required
-          value={form.unit_cost_per_base}
-          onChange={(e) => setForm({ ...form, unit_cost_per_base: parseFloat(e.target.value) || 0 })}
-          placeholder="20.36"
-          step="0.01"
-          hint={`Ej: si compras 1 Kg a $20.000, costo/Gr = 20`}
-        />
-        <SelectField label="Grupo de inventario" value={form.group_name ?? ''} onChange={(e) => setForm({ ...form, group_name: e.target.value })}>
-          <option value="">Sin grupo</option>
-          {GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
-        </SelectField>
-        <Field label="Proveedor" value={form.supplier ?? ''} onChange={(e) => setForm({ ...form, supplier: e.target.value })} placeholder="CreaLuz" />
-        <Field label="Stock actual" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: parseFloat(e.target.value) || 0 })} />
-        <Field label="Stock mínimo" type="number" value={form.stock_min} onChange={(e) => setForm({ ...form, stock_min: parseFloat(e.target.value) || 0 })} />
-      </div>
-      <div className="flex gap-3 justify-end pt-2">
-        <Button type="button" variant="secondary" onClick={onCancel}>Cancelar</Button>
-        <Button type="submit" loading={loading} leftIcon={<Save className="w-4 h-4" />}>
-          {initial?.id ? 'Guardar cambios' : 'Crear insumo'}
-        </Button>
-      </div>
-    </form>
-  );
-}
+const STATUS_BADGE: Record<StockStatus, 'green' | 'yellow' | 'red'> = {
+  OK: 'green', REPONER: 'yellow', AGOTADO: 'red',
+};
+const MOVEMENT_LABEL: Record<MovementType, string> = {
+  ENTRADA_COMPRA: 'Entrada (compra)',
+  SALIDA_VENTA: 'Salida (venta)',
+  REVERSO_VENTA: 'Reverso venta',
+  AJUSTE: 'Ajuste',
+  SALIDA_PRODUCCION: 'Salida (producción)',
+  TRASLADO: 'Traslado',
+};
 
 export default function InventariosModule() {
   const { state } = useAppStore();
-  const [items, setItems] = useState<InventoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [groupFilter, setGroupFilter] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<InventoryItem | null>(null);
-  const [deleting, setDeleting] = useState<InventoryItem | null>(null);
-  const [isDemo, setIsDemo] = useState(false);
+  const canEdit = useCanEdit();
+  const isSuperAdmin = useIsSuperAdmin();
+  const companyId = state.company?.id ?? '';
 
-  const loadItems = async () => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('stock');
+
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [groups, setGroups] = useState<ItemGroup[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [stock, setStock] = useState<StockRow[]>([]);
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
+
+  // Filtros
+  const [activeGroup, setActiveGroup] = useState<string | 'all'>('all');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | StockStatus>('all');
+  const [movType, setMovType] = useState<'all' | MovementType>('all');
+  const [movFrom, setMovFrom] = useState('');
+  const [movTo, setMovTo] = useState('');
+
+  // Modales
+  const [showGroup, setShowGroup] = useState(false);
+  const [newGroup, setNewGroup] = useState('');
+  const [showLocation, setShowLocation] = useState(false);
+  const [newLocation, setNewLocation] = useState('');
+  const [showMaterial, setShowMaterial] = useState(false);
+  const [showPurchase, setShowPurchase] = useState(false);
+  const [showAdjust, setShowAdjust] = useState(false);
+
+  const loadAll = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const data = await fetchInventoryItems();
-      if (data.length === 0 && !state.company?.id) {
-        // Demo mode
-        setItems(MOCK_INVENTORY_ITEMS);
-        setIsDemo(true);
-      } else {
-        setItems(data);
-        setIsDemo(false);
-      }
+      const [u, g, s, l, m, st] = await Promise.all([
+        fetchUnits(), fetchGroups(), fetchSuppliers(), fetchLocations(),
+        fetchMaterials(), fetchStockSummary(),
+      ]);
+      setUnits(u); setGroups(g); setSuppliers(s); setLocations(l);
+      setMaterials(m); setStock(st);
     } catch {
-      setItems(MOCK_INVENTORY_ITEMS);
-      setIsDemo(true);
+      setError('No se pudieron cargar los datos. Verifica que aplicaste las migraciones 003, 004 y 005 en Supabase y que tu usuario tiene empresa asignada.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadItems(); }, []);
+  useEffect(() => { loadAll(); }, []);
 
-  const filtered = items.filter((item) => {
-    const matchSearch = !search ||
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      (item.sku ?? '').toLowerCase().includes(search.toLowerCase());
-    const matchGroup = !groupFilter || item.group_name === groupFilter;
-    return matchSearch && matchGroup;
-  });
-
-  const handleCreate = async (item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>) => {
-    await createInventoryItem(item, state.company?.id ?? '');
-    setShowModal(false);
-    loadItems();
+  const loadMovements = async () => {
+    try {
+      const data = await fetchMovements({
+        type: movType === 'all' ? undefined : movType,
+        from: movFrom || undefined,
+        to: movTo || undefined,
+      });
+      setMovements(data);
+    } catch {
+      setError('No se pudieron cargar los movimientos.');
+    }
   };
 
-  const handleUpdate = async (item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>) => {
-    if (!editing) return;
-    await updateInventoryItem(editing.id, item);
-    setEditing(null);
-    loadItems();
-  };
+  useEffect(() => {
+    if (tab === 'movimientos') loadMovements();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, movType, movFrom, movTo]);
 
-  const handleDelete = async () => {
-    if (!deleting) return;
-    await deleteInventoryItem(deleting.id);
-    setDeleting(null);
-    loadItems();
-  };
+  // Stock filtrado
+  const filteredStock = useMemo(() => {
+    return stock.filter((r) => {
+      const inGroup = activeGroup === 'all' || r.group_id === activeGroup;
+      const matchesSearch =
+        r.material_name.toLowerCase().includes(search.toLowerCase()) ||
+        (r.code ?? '').toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+      return inGroup && matchesSearch && matchesStatus;
+    });
+  }, [stock, activeGroup, search, statusFilter]);
 
-  const lowStock = items.filter((i) => i.stock <= i.stock_min && i.stock_min > 0).length;
-  const totalValue = items.reduce((sum, i) => sum + i.unit_cost_per_base * i.stock, 0);
-  const groups = [...new Set(items.map((i) => i.group_name).filter(Boolean))];
+  const stats = useMemo(() => {
+    const total = stock.length;
+    const low = stock.filter((r) => r.status !== 'OK').length;
+    const value = stock.reduce((acc, r) => acc + (r.stock_value || 0), 0);
+    return { total, low, value };
+  }, [stock]);
+
+  const materialName = (id: string) => materials.find((m) => m.id === id)?.name ?? '—';
+
+  if (loading) {
+    return <div className="page-container flex justify-center py-20"><Spinner size="lg" /></div>;
+  }
 
   return (
     <div className="page-container">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <Package className="w-6 h-6 text-suma-600" />
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Inventarios</h1>
-            {isDemo && <Badge variant="yellow">Modo demo</Badge>}
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Inventario</h1>
+            {isSuperAdmin && <Badge variant="purple">Revisión SUMA</Badge>}
           </div>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Control de insumos y materias primas. El costo/unidad base se usa en recetas.
+            Controla el stock por sede y grupo. El costo de cada compra actualiza el precio de
+            los insumos que usan tus recetas en Costos.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={loadItems} leftIcon={<RefreshCw className="w-4 h-4" />}>
-            Actualizar
-          </Button>
-          <Button size="sm" leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowModal(true)}>
-            Nuevo insumo
-          </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="secondary" size="sm" onClick={loadAll} leftIcon={<RefreshCw className="w-4 h-4" />}>Actualizar</Button>
+          {canEdit && <Button size="sm" onClick={() => setShowMaterial(true)} leftIcon={<Plus className="w-4 h-4" />}>Nuevo insumo</Button>}
+          {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowPurchase(true)} leftIcon={<ShoppingCart className="w-4 h-4" />}>Registrar compra</Button>}
+          {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowAdjust(true)} leftIcon={<SlidersHorizontal className="w-4 h-4" />}>Ajuste</Button>}
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard
-          title="Total de insumos"
-          value={items.length}
-          icon={<Package className="w-5 h-5" />}
-          color="blue"
-        />
-        <StatCard
-          title="Stock bajo"
-          value={lowStock}
-          subtitle="Bajo el mínimo"
-          icon={<AlertTriangle className="w-5 h-5" />}
-          color={lowStock > 0 ? 'red' : 'green'}
-        />
-        <StatCard
-          title="Valor del inventario"
-          value={formatCOP(totalValue)}
-          icon={<Package className="w-5 h-5" />}
-          color="purple"
-        />
-      </div>
+      {error && <Alert type="error" className="mb-4">{error}</Alert>}
 
-      {/* Filtros */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar insumo o SKU..."
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
-          />
-        </div>
-        <select
-          value={groupFilter}
-          onChange={(e) => setGroupFilter(e.target.value)}
-          className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
-        >
-          <option value="">Todos los grupos</option>
-          {groups.map((g) => <option key={g} value={g!}>{g}</option>)}
-        </select>
-      </div>
-
-      {/* Tabla */}
-      <Card>
-        {loading ? (
-          <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={<Package className="w-12 h-12" />}
-            title="Sin insumos"
-            description="Agrega insumos manualmente o impórtalos desde Excel."
-            action={<Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowModal(true)}>Nuevo insumo</Button>}
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="suma-table">
-              <thead>
-                <tr>
-                  <th>SKU</th>
-                  <th>Nombre</th>
-                  <th>Grupo</th>
-                  <th>Unidad base</th>
-                  <th>Costo/unidad</th>
-                  <th>Stock</th>
-                  <th>Proveedor</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((item) => {
-                  const isLow = item.stock <= item.stock_min && item.stock_min > 0;
-                  return (
-                    <tr key={item.id}>
-                      <td className="text-xs font-mono text-gray-500">{item.sku ?? '—'}</td>
-                      <td className="font-medium text-gray-900 dark:text-white">{item.name}</td>
-                      <td>
-                        {item.group_name ? (
-                          <Badge variant="gray">{item.group_name}</Badge>
-                        ) : '—'}
-                      </td>
-                      <td>{item.base_unit}</td>
-                      <td className="font-mono text-sm">{formatCOP(item.unit_cost_per_base)}</td>
-                      <td>
-                        <div className="flex items-center gap-1">
-                          <span className={isLow ? 'text-red-600 dark:text-red-400 font-semibold' : ''}>
-                            {item.stock} {item.base_unit}
-                          </span>
-                          {isLow && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
-                        </div>
-                      </td>
-                      <td className="text-gray-500 text-sm">{item.supplier ?? '—'}</td>
-                      <td>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => setEditing(item)}
-                            className="p-1.5 text-gray-400 hover:text-suma-600 hover:bg-suma-50 dark:hover:bg-suma-950 rounded-lg transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleting(item)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Sedes + Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+        <StatCard title="Insumos activos" value={stats.total} icon={<Boxes className="w-5 h-5" />} color="blue" />
+        <StatCard title="Por reponer / agotados" value={stats.low} icon={<AlertTriangle className="w-5 h-5" />} color="orange" />
+        <StatCard title="Valor del inventario" value={formatCOP(stats.value)} icon={<Package className="w-5 h-5" />} color="green" />
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <Building2 className="w-5 h-5 text-gray-400" />
+          <div className="min-w-0">
+            <p className="text-xs text-gray-500">Sedes</p>
+            <p className="text-sm font-semibold truncate">{locations.length} activa(s)</p>
           </div>
-        )}
-      </Card>
+          {canEdit && (
+            <button onClick={() => setShowLocation(true)} className="ml-auto p-1 text-suma-600 hover:bg-suma-50 dark:hover:bg-suma-950 rounded" title="Nueva sede">
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
 
-      {/* Modal crear */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nuevo insumo" size="lg">
-        <ItemForm onSave={handleCreate} onCancel={() => setShowModal(false)} />
-      </Modal>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-800">
+        <TabButton active={tab === 'stock'} onClick={() => setTab('stock')} icon={<Boxes className="w-4 h-4" />} label="Stock" />
+        <TabButton active={tab === 'movimientos'} onClick={() => setTab('movimientos')} icon={<ListFilter className="w-4 h-4" />} label="Movimientos (kárdex)" />
+      </div>
 
-      {/* Modal editar */}
-      <Modal isOpen={!!editing} onClose={() => setEditing(null)} title="Editar insumo" size="lg">
-        {editing && (
-          <ItemForm initial={editing} onSave={handleUpdate} onCancel={() => setEditing(null)} />
-        )}
-      </Modal>
+      {tab === 'stock' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
+          {/* Carpetas por grupo */}
+          <aside className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Grupos</h3>
+              {canEdit && (
+                <button onClick={() => setShowGroup(true)} className="p-1 text-suma-600 hover:bg-suma-50 dark:hover:bg-suma-950 rounded" title="Nuevo grupo">
+                  <FolderPlus className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <GroupButton active={activeGroup === 'all'} onClick={() => setActiveGroup('all')} icon={<FileText className="w-4 h-4" />} label={`Todos (${stock.length})`} />
+            {groups.map((g) => {
+              const count = stock.filter((r) => r.group_id === g.id).length;
+              return (
+                <div key={g.id} className="group flex items-center">
+                  <GroupButton active={activeGroup === g.id} onClick={() => setActiveGroup(g.id)} icon={<Folder className="w-4 h-4" />} label={`${g.name} (${count})`} />
+                  {canEdit && (
+                    <button onClick={async () => { await deleteGroup(g.id); if (activeGroup === g.id) setActiveGroup('all'); setGroups(await fetchGroups()); }} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500" title="Eliminar grupo">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            {groups.length === 0 && <p className="text-xs text-gray-400 px-3">Crea grupos para organizar tus insumos.</p>}
+          </aside>
 
-      {/* Modal eliminar */}
-      <Modal isOpen={!!deleting} onClose={() => setDeleting(null)} title="Eliminar insumo" size="sm">
-        <div className="p-6">
-          <p className="text-gray-700 dark:text-gray-300 mb-6">
-            ¿Estás seguro de eliminar <strong>{deleting?.name}</strong>?
-            Esta acción no se puede deshacer.
-          </p>
-          <div className="flex gap-3 justify-end">
-            <Button variant="secondary" onClick={() => setDeleting(null)}>Cancelar</Button>
-            <Button variant="danger" onClick={handleDelete} leftIcon={<Trash2 className="w-4 h-4" />}>
-              Eliminar
-            </Button>
+          {/* Tabla de stock */}
+          <section>
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar insumo por nombre o código..."
+                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500" />
+              </div>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | StockStatus)}
+                className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                <option value="all">Todos los estados</option>
+                <option value="OK">OK</option>
+                <option value="REPONER">Por reponer</option>
+                <option value="AGOTADO">Agotado</option>
+              </select>
+            </div>
+
+            <Card>
+              {filteredStock.length === 0 ? (
+                <EmptyState icon={<Package className="w-12 h-12" />} title="Sin insumos en esta vista"
+                  description={canEdit ? 'Crea un insumo y registra su primera compra para ver stock.' : 'Aún no hay insumos registrados aquí.'}
+                  action={canEdit ? <Button onClick={() => setShowMaterial(true)} leftIcon={<Plus className="w-4 h-4" />}>Nuevo insumo</Button> : undefined} />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="suma-table">
+                    <thead><tr>
+                      <th>Código</th><th>Insumo</th><th>Unidad</th><th>Stock</th>
+                      <th>Mínimo</th><th>Costo unit.</th><th>Valor</th><th>Estado</th>
+                    </tr></thead>
+                    <tbody>
+                      {filteredStock.map((r) => (
+                        <tr key={r.material_id}>
+                          <td className="font-mono text-xs text-gray-500">{r.code || '—'}</td>
+                          <td className="font-semibold text-gray-900 dark:text-white">{r.material_name}</td>
+                          <td>{r.base_unit}</td>
+                          <td className="font-mono">{r.stock}</td>
+                          <td className="font-mono text-gray-500">{r.stock_min}</td>
+                          <td className="font-mono text-sm">{formatCOP(r.unit_cost)}</td>
+                          <td className="font-mono text-sm">{formatCOP(r.stock_value)}</td>
+                          <td><Badge variant={STATUS_BADGE[r.status]}>{r.status}</Badge></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          </section>
+        </div>
+      ) : (
+        /* KÁRDEX / Movimientos */
+        <section>
+          <div className="flex flex-col sm:flex-row gap-3 mb-4 flex-wrap">
+            <select value={movType} onChange={(e) => setMovType(e.target.value as 'all' | MovementType)}
+              className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+              <option value="all">Todos los tipos</option>
+              {Object.entries(MOVEMENT_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <label className="flex items-center gap-2 text-sm text-gray-500">Desde
+              <input type="date" value={movFrom} onChange={(e) => setMovFrom(e.target.value)}
+                className="px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900" />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-500">Hasta
+              <input type="date" value={movTo} onChange={(e) => setMovTo(e.target.value)}
+                className="px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900" />
+            </label>
+            <Button variant="secondary" size="sm" onClick={loadMovements} leftIcon={<RefreshCw className="w-4 h-4" />}>Aplicar</Button>
+          </div>
+
+          <Card>
+            {movements.length === 0 ? (
+              <EmptyState icon={<ListFilter className="w-12 h-12" />} title="Sin movimientos" description="Las compras, ajustes y salidas por venta aparecerán aquí." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="suma-table">
+                  <thead><tr><th>Fecha</th><th>Tipo</th><th>Insumo</th><th>Cantidad</th><th>Costo unit.</th><th>Motivo / Ref.</th></tr></thead>
+                  <tbody>
+                    {movements.map((mv) => (
+                      <tr key={mv.id}>
+                        <td className="text-xs text-gray-500">{new Date(mv.moved_at).toLocaleDateString('es-CO')}</td>
+                        <td><Badge variant={mv.quantity >= 0 ? 'green' : 'red'}>{MOVEMENT_LABEL[mv.movement_type]}</Badge></td>
+                        <td className="font-medium">{materialName(mv.material_id)}</td>
+                        <td className={`font-mono ${mv.quantity >= 0 ? 'text-green-600' : 'text-red-600'}`}>{mv.quantity >= 0 ? '+' : ''}{mv.quantity}</td>
+                        <td className="font-mono text-sm">{formatCOP(mv.unit_cost)}</td>
+                        <td className="text-xs text-gray-500">{mv.reason || mv.reference_type || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </section>
+      )}
+
+      {/* ─── Modales ─── */}
+      <Modal isOpen={showGroup} onClose={() => setShowGroup(false)} title="Nuevo grupo" size="sm">
+        <div className="p-6 space-y-4">
+          <Field label="Nombre del grupo" value={newGroup} onChange={(e) => setNewGroup(e.target.value)} placeholder="Ej. Lácteos, Empaques..." />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowGroup(false)}>Cancelar</Button>
+            <Button onClick={async () => { if (newGroup.trim()) { await createGroup(companyId, newGroup.trim()); setNewGroup(''); setShowGroup(false); setGroups(await fetchGroups()); } }} leftIcon={<FolderPlus className="w-4 h-4" />}>Crear</Button>
           </div>
         </div>
       </Modal>
+
+      <Modal isOpen={showLocation} onClose={() => setShowLocation(false)} title="Nueva sede / bodega" size="sm">
+        <div className="p-6 space-y-4">
+          <Field label="Nombre de la sede" value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="Ej. Bodega Norte" />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowLocation(false)}>Cancelar</Button>
+            <Button onClick={async () => { if (newLocation.trim()) { await createLocation(companyId, newLocation.trim()); setNewLocation(''); setShowLocation(false); setLocations(await fetchLocations()); } }} leftIcon={<Plus className="w-4 h-4" />}>Crear sede</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {showMaterial && (
+        <MaterialForm companyId={companyId} units={units} groups={groups} suppliers={suppliers}
+          onClose={() => setShowMaterial(false)}
+          onSaved={async () => { setShowMaterial(false); await loadAll(); }}
+          onNewSupplier={async (name) => { const s = await createSupplier(companyId, name); setSuppliers(await fetchSuppliers()); return s; }} />
+      )}
+
+      {showPurchase && (
+        <PurchaseForm companyId={companyId} materials={materials} locations={locations} suppliers={suppliers}
+          onClose={() => setShowPurchase(false)}
+          onSaved={async () => { setShowPurchase(false); await loadAll(); }} />
+      )}
+
+      {showAdjust && (
+        <AdjustForm companyId={companyId} materials={materials} locations={locations}
+          onClose={() => setShowAdjust(false)}
+          onSaved={async () => { setShowAdjust(false); await loadAll(); }} />
+      )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────
+// Subcomponentes
+// ─────────────────────────────────────────
+function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button onClick={onClick}
+      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+        active ? 'border-suma-600 text-suma-700 dark:text-suma-300' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+      }`}>
+      {icon} {label}
+    </button>
+  );
+}
+
+function GroupButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button onClick={onClick}
+      className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+        active ? 'bg-suma-50 dark:bg-suma-950 text-suma-700 dark:text-suma-300' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+      }`}>
+      {icon} {label}
+    </button>
+  );
+}
+
+function MaterialForm({ companyId, units, groups, suppliers, onClose, onSaved, onNewSupplier }: {
+  companyId: string; units: Unit[]; groups: ItemGroup[]; suppliers: Supplier[];
+  onClose: () => void; onSaved: () => void; onNewSupplier: (name: string) => Promise<Supplier>;
+}) {
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [groupId, setGroupId] = useState('');
+  const [baseUnit, setBaseUnit] = useState(units[0]?.code ?? 'Und');
+  const [supplierId, setSupplierId] = useState('');
+  const [stockMin, setStockMin] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = async () => {
+    if (!name.trim()) { setErr('El nombre es obligatorio.'); return; }
+    setSaving(true); setErr(null);
+    try {
+      await createMaterial(companyId, {
+        name: name.trim(), code: code || null, group_id: groupId || null,
+        base_unit: baseUnit, supplier_id: supplierId || null, stock_min: stockMin,
+      });
+      onSaved();
+    } catch (e) { setErr((e as Error).message || 'No se pudo guardar.'); } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Nuevo insumo" size="lg">
+      <div className="p-6 space-y-4">
+        {err && <Alert type="error">{err}</Alert>}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2"><Field label="Nombre del insumo" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Arroz, Huevo, Cera de Soya" /></div>
+          <Field label="Código / SKU" value={code} onChange={(e) => setCode(e.target.value)} placeholder="MP-001" />
+          <SelectField label="Grupo" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+            <option value="">(Sin grupo)</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </SelectField>
+          <SelectField label="Unidad base" value={baseUnit} onChange={(e) => setBaseUnit(e.target.value)} hint="La unidad en que llevas el stock">
+            {units.map((u) => <option key={u.id} value={u.code}>{u.code} — {u.name}</option>)}
+          </SelectField>
+          <SelectField label="Proveedor" value={supplierId} onChange={(e) => {
+            if (e.target.value === '__new__') {
+              const n = window.prompt('Nombre del nuevo proveedor:');
+              if (n && n.trim()) onNewSupplier(n.trim()).then((s) => setSupplierId(s.id));
+            } else setSupplierId(e.target.value);
+          }}>
+            <option value="">(Sin proveedor)</option>
+            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <option value="__new__">+ Nuevo proveedor…</option>
+          </SelectField>
+          <Field label="Stock mínimo" type="number" value={stockMin} onChange={(e) => setStockMin(Number(e.target.value))} hint="Avisa 'Reponer' si baja de este nivel" />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} loading={saving} leftIcon={<Save className="w-4 h-4" />}>Crear insumo</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function PurchaseForm({ companyId, materials, locations, suppliers, onClose, onSaved }: {
+  companyId: string; materials: Material[]; locations: Location[]; suppliers: Supplier[];
+  onClose: () => void; onSaved: () => void;
+}) {
+  const [materialId, setMaterialId] = useState('');
+  const [quantity, setQuantity] = useState(0);
+  const [totalCost, setTotalCost] = useState(0);
+  const [locationId, setLocationId] = useState(locations.find((l) => l.is_default)?.id ?? locations[0]?.id ?? '');
+  const [supplierId, setSupplierId] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const mat = materials.find((m) => m.id === materialId);
+  const unitCost = quantity > 0 ? totalCost / quantity : 0;
+
+  const save = async () => {
+    if (!materialId) { setErr('Elige un insumo.'); return; }
+    if (quantity <= 0) { setErr('La cantidad debe ser mayor a 0.'); return; }
+    setSaving(true); setErr(null);
+    try {
+      await createPurchase(companyId, {
+        material_id: materialId, quantity, total_cost: totalCost,
+        purchased_at: date, supplier_id: supplierId || null, location_id: locationId || null,
+      });
+      onSaved();
+    } catch (e) { setErr((e as Error).message || 'No se pudo registrar la compra.'); } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Registrar compra (entrada de stock)" size="lg">
+      <div className="p-6 space-y-4">
+        {err && <Alert type="error">{err}</Alert>}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2">
+            <SelectField label="Insumo" value={materialId} onChange={(e) => setMaterialId(e.target.value)} required>
+              <option value="">-- Elige el insumo --</option>
+              {materials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.base_unit})</option>)}
+            </SelectField>
+          </div>
+          <Field label={`Cantidad (${mat?.base_unit ?? 'unidad base'})`} type="number" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} hint="En la unidad base del insumo" />
+          <Field label="Costo total pagado (COP)" type="number" value={totalCost} onChange={(e) => setTotalCost(Number(e.target.value))} />
+          <SelectField label="Sede / bodega" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </SelectField>
+          <SelectField label="Proveedor" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+            <option value="">(Sin proveedor)</option>
+            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </SelectField>
+          <Field label="Fecha" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div className="bg-suma-50 dark:bg-suma-950 p-3 rounded-lg text-sm">
+          Costo por {mat?.base_unit ?? 'unidad'}: <strong className="font-mono">{formatCOP(unitCost)}</strong>
+          <span className="text-xs text-gray-500 block">Este valor actualizará el costo del insumo en tus recetas.</span>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} loading={saving} leftIcon={<ShoppingCart className="w-4 h-4" />}>Registrar compra</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function AdjustForm({ companyId, materials, locations, onClose, onSaved }: {
+  companyId: string; materials: Material[]; locations: Location[];
+  onClose: () => void; onSaved: () => void;
+}) {
+  const [materialId, setMaterialId] = useState('');
+  const [quantity, setQuantity] = useState(0);
+  const [locationId, setLocationId] = useState(locations.find((l) => l.is_default)?.id ?? locations[0]?.id ?? '');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = async () => {
+    if (!materialId) { setErr('Elige un insumo.'); return; }
+    if (quantity === 0) { setErr('La cantidad no puede ser 0 (usa + para entrada, − para salida).'); return; }
+    if (!reason.trim()) { setErr('El motivo es obligatorio.'); return; }
+    setSaving(true); setErr(null);
+    try {
+      await createAdjustment(companyId, { material_id: materialId, location_id: locationId || null, quantity, reason: reason.trim() });
+      onSaved();
+    } catch (e) { setErr((e as Error).message || 'No se pudo registrar el ajuste.'); } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Ajuste de inventario" size="md">
+      <div className="p-6 space-y-4">
+        {err && <Alert type="error">{err}</Alert>}
+        <SelectField label="Insumo" value={materialId} onChange={(e) => setMaterialId(e.target.value)} required>
+          <option value="">-- Elige el insumo --</option>
+          {materials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.base_unit})</option>)}
+        </SelectField>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Cantidad (+ entra / − sale)" type="number" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} hint="Ej. -5 para una merma" />
+          <SelectField label="Sede / bodega" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </SelectField>
+        </div>
+        <Field label="Motivo" required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ej. Conteo físico, merma, daño..." />
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} loading={saving} leftIcon={<Save className="w-4 h-4" />}>Registrar ajuste</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
