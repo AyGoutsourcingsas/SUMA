@@ -72,6 +72,7 @@ export default function InventariosModule() {
   // Modales
   const [showGroup, setShowGroup] = useState(false);
   const [newGroup, setNewGroup] = useState('');
+  const [newGroupDesc, setNewGroupDesc] = useState('');
   const [groupError, setGroupError] = useState<string | null>(null);
   const [savingGroup, setSavingGroup] = useState(false);
   const [showLocation, setShowLocation] = useState(false);
@@ -338,6 +339,16 @@ export default function InventariosModule() {
         <div className="p-6 space-y-4">
           {groupError && <Alert type="error">{groupError}</Alert>}
           <Field label="Nombre del grupo" value={newGroup} onChange={(e) => setNewGroup(e.target.value)} placeholder="Ej. Lácteos, Empaques..." />
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción (opcional)</span>
+            <textarea
+              value={newGroupDesc}
+              onChange={(e) => setNewGroupDesc(e.target.value)}
+              placeholder="¿Qué contiene esta carpeta? Ej. Materias primas de cera y colorantes."
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
+            />
+          </label>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => { setShowGroup(false); setGroupError(null); }}>Cancelar</Button>
             <Button
@@ -348,8 +359,8 @@ export default function InventariosModule() {
                 if (!companyId) { setGroupError('Selecciona una empresa activa en la barra superior antes de crear grupos.'); return; }
                 setSavingGroup(true);
                 try {
-                  await createGroup(companyId, newGroup.trim());
-                  setNewGroup('');
+                  await createGroup(companyId, newGroup.trim(), null, newGroupDesc.trim() || null);
+                  setNewGroup(''); setNewGroupDesc('');
                   setShowGroup(false);
                   setGroups(await fetchGroups());
                 } catch (e) {

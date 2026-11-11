@@ -78,10 +78,11 @@ export async function createGroup(
   name: string,
   kind: 'material' | 'recipe',
   parentId?: string | null,
+  description?: string | null,
 ): Promise<ItemGroup> {
   const { data, error } = await supabase
     .from('item_groups')
-    .insert({ company_id: companyId, name, kind, parent_id: parentId ?? null })
+    .insert({ company_id: companyId, name, kind, parent_id: parentId ?? null, description: description ?? null })
     .select()
     .single();
   if (error) throw error;
