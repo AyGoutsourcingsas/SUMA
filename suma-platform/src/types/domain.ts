@@ -258,6 +258,9 @@ export interface Material {
   is_active: boolean;
   note?: string;
   custom_fields: Record<string, unknown>;
+  // Overrides de costo (migración 008)
+  projected_cost?: number | null;  // precio a futuro (manual)
+  frozen_cost?: number | null;     // precio congelado (anterior)
   created_at: string;
   updated_at: string;
 }

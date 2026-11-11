@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Package, Plus, Search, RefreshCw, FolderPlus, Folder, X,
   ShoppingCart, SlidersHorizontal, ListFilter, Boxes, Building2,
-  AlertTriangle, Save, FileText,
+  AlertTriangle, Save, FileText, History, Download, Settings2,
 } from 'lucide-react';
 import {
   Button, Card, Field, SelectField, Modal, Badge, EmptyState, Alert, Spinner, StatCard,
@@ -18,11 +18,15 @@ import {
   fetchUnits, fetchGroups, createGroup, deleteGroup, fetchSuppliers, createSupplier,
   fetchLocations, createLocation, fetchMaterials, createMaterial,
   fetchStockSummary, createPurchase, createAdjustment, fetchMovements,
+  fetchCostPolicy, setCostPolicy, setMaterialCostOverrides, fetchCostHistory,
+  COST_POLICY_LABEL,
   type StockRow, type StockStatus, type Location, type InventoryMovement, type MovementType,
+  type CostPolicy, type CostHistoryRow,
 } from '@/services/modules/inventario';
+import { downloadAsExcel } from '@/lib/excelExport';
 import type { ItemGroup, Supplier, Unit, Material } from '@/types/domain';
 
-type Tab = 'stock' | 'movimientos';
+type Tab = 'stock' | 'movimientos' | 'costos';
 
 const STATUS_BADGE: Record<StockStatus, 'green' | 'yellow' | 'red'> = {
   OK: 'green', REPONER: 'yellow', AGOTADO: 'red',
@@ -53,6 +57,7 @@ export default function InventariosModule() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [costPolicy, setCostPolicyState] = useState<CostPolicy>('ULTIMA_COMPRA');
 
   // Filtros
   const [activeGroup, setActiveGroup] = useState<string | 'all'>('all');
@@ -75,12 +80,13 @@ export default function InventariosModule() {
     setLoading(true);
     setError(null);
     try {
-      const [u, g, s, l, m, st] = await Promise.all([
+      const [u, g, s, l, m, st, pol] = await Promise.all([
         fetchUnits(), fetchGroups(), fetchSuppliers(), fetchLocations(),
         fetchMaterials(), fetchStockSummary(),
+        companyId ? fetchCostPolicy(companyId) : Promise.resolve('ULTIMA_COMPRA' as CostPolicy),
       ]);
       setUnits(u); setGroups(g); setSuppliers(s); setLocations(l);
-      setMaterials(m); setStock(st);
+      setMaterials(m); setStock(st); setCostPolicyState(pol);
     } catch {
       setError('No se pudieron cargar los datos. Verifica que aplicaste las migraciones 003, 004 y 005 en Supabase y que tu usuario tiene empresa asignada.');
     } finally {
@@ -181,9 +187,18 @@ export default function InventariosModule() {
       <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-800">
         <TabButton active={tab === 'stock'} onClick={() => setTab('stock')} icon={<Boxes className="w-4 h-4" />} label="Stock" />
         <TabButton active={tab === 'movimientos'} onClick={() => setTab('movimientos')} icon={<ListFilter className="w-4 h-4" />} label="Movimientos (kárdex)" />
+        <TabButton active={tab === 'costos'} onClick={() => setTab('costos')} icon={<Settings2 className="w-4 h-4" />} label="Costos & política" />
       </div>
 
-      {tab === 'stock' ? (
+      {tab === 'costos' ? (
+        <CostPolicyPanel
+          policy={costPolicy}
+          materials={materials}
+          canEdit={canEdit}
+          onPolicyChange={async (p) => { await setCostPolicy(companyId, p); setCostPolicyState(p); await loadAll(); }}
+          onOverrideSaved={loadAll}
+        />
+      ) : tab === 'stock' ? (
         <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
           {/* Carpetas por grupo */}
           <aside className="space-y-2">
@@ -542,5 +557,190 @@ function AdjustForm({ companyId, materials, locations, onClose, onSaved }: {
         </div>
       </div>
     </Modal>
+  );
+}
+
+// ─────────────────────────────────────────
+// Panel de Costos & Política de costeo (+ historial descargable)
+// ─────────────────────────────────────────
+function CostPolicyPanel({
+  policy, materials, canEdit, onPolicyChange, onOverrideSaved,
+}: {
+  policy: CostPolicy;
+  materials: Material[];
+  canEdit: boolean;
+  onPolicyChange: (p: CostPolicy) => void | Promise<void>;
+  onOverrideSaved: () => void | Promise<void>;
+}) {
+  const [history, setHistory] = useState<CostHistoryRow[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, { projected?: string; frozen?: string }>>({});
+
+  const materialName = (id: string) => materials.find((m) => m.id === id)?.name ?? '—';
+
+  const loadHistory = async () => {
+    const h = await fetchCostHistory();
+    setHistory(h);
+    setShowHistory(true);
+  };
+
+  const downloadHistory = async () => {
+    const h = history.length ? history : await fetchCostHistory();
+    const rows = h.map((r) => ({
+      Fecha: new Date(r.changed_at).toLocaleString('es-CO'),
+      Insumo: materialName(r.material_id),
+      'Costo anterior': r.old_cost ?? '',
+      'Costo nuevo': r.new_cost,
+      Variación: r.old_cost != null ? r.new_cost - r.old_cost : '',
+      'Variación %': r.old_cost ? (((r.new_cost - r.old_cost) / r.old_cost) * 100).toFixed(1) + '%' : '',
+      Tipo: r.change_kind,
+      Nota: r.note ?? '',
+    }));
+    downloadAsExcel(rows, 'historial_costos', 'Historial de costos');
+  };
+
+  const saveOverride = async (id: string) => {
+    setSavingId(id);
+    try {
+      const d = drafts[id] ?? {};
+      await setMaterialCostOverrides(id, {
+        projected_cost: d.projected !== undefined && d.projected !== '' ? Number(d.projected) : undefined,
+        frozen_cost: d.frozen !== undefined && d.frozen !== '' ? Number(d.frozen) : undefined,
+      });
+      await onOverrideSaved();
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Selector de política */}
+      <Card>
+        <div className="p-5">
+          <div className="flex items-start gap-3 mb-4">
+            <Settings2 className="w-5 h-5 text-suma-600 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white">Política de costeo de la empresa</h3>
+              <p className="text-sm text-gray-500">Define con qué costo se calculan tus recetas. Al cambiarla, todas las recetas se recalculan.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {(Object.keys(COST_POLICY_LABEL) as CostPolicy[]).map((p) => (
+              <button
+                key={p}
+                disabled={!canEdit}
+                onClick={() => onPolicyChange(p)}
+                className={`text-left p-3 rounded-lg border text-sm transition-colors ${
+                  policy === p
+                    ? 'border-suma-500 bg-suma-50 dark:bg-suma-950 text-suma-800 dark:text-suma-200'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-suma-300'
+                } ${!canEdit ? 'opacity-60 cursor-not-allowed' : ''}`}
+              >
+                <span className="font-semibold block">{COST_POLICY_LABEL[p]}</span>
+                <span className="text-xs text-gray-500">
+                  {p === 'ULTIMA_COMPRA' && 'Usa el precio de la compra más reciente.'}
+                  {p === 'PROMEDIO' && 'Promedio de todas las compras.'}
+                  {p === 'CONGELADO' && 'Mantiene el precio anterior que fijaste.'}
+                  {p === 'PROYECTADO' && 'Usa el precio a futuro que proyectes.'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      {/* Costos por insumo: actual / proyectado / congelado */}
+      <Card>
+        <div className="p-5 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900 dark:text-white">Costos por insumo</h3>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={loadHistory} leftIcon={<History className="w-4 h-4" />}>Ver historial</Button>
+            <Button variant="secondary" size="sm" onClick={downloadHistory} leftIcon={<Download className="w-4 h-4" />}>Descargar Excel</Button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="suma-table">
+            <thead><tr>
+              <th>Insumo</th><th>Unidad</th><th>Costo actual</th>
+              <th>Congelado (anterior)</th><th>Proyectado (futuro)</th>{canEdit && <th></th>}
+            </tr></thead>
+            <tbody>
+              {materials.map((m) => {
+                const d = drafts[m.id] ?? {};
+                return (
+                  <tr key={m.id}>
+                    <td className="font-semibold text-gray-900 dark:text-white">{m.name}</td>
+                    <td>{m.base_unit}</td>
+                    <td className="font-mono text-sm">{formatCOP(m.unit_cost_per_base)}</td>
+                    <td>
+                      {canEdit ? (
+                        <input type="number" step="any"
+                          defaultValue={m.frozen_cost ?? ''}
+                          onChange={(e) => setDrafts((prev) => ({ ...prev, [m.id]: { ...prev[m.id], frozen: e.target.value } }))}
+                          placeholder="—"
+                          className="w-28 px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-right bg-white dark:bg-gray-800" />
+                      ) : formatCOP(m.frozen_cost ?? 0)}
+                    </td>
+                    <td>
+                      {canEdit ? (
+                        <input type="number" step="any"
+                          defaultValue={m.projected_cost ?? ''}
+                          onChange={(e) => setDrafts((prev) => ({ ...prev, [m.id]: { ...prev[m.id], projected: e.target.value } }))}
+                          placeholder="—"
+                          className="w-28 px-2 py-1 rounded border border-gray-300 dark:border-gray-700 text-xs text-right bg-white dark:bg-gray-800" />
+                      ) : formatCOP(m.projected_cost ?? 0)}
+                    </td>
+                    {canEdit && (
+                      <td>
+                        {(d.projected !== undefined || d.frozen !== undefined) && (
+                          <Button size="xs" onClick={() => saveOverride(m.id)} loading={savingId === m.id} leftIcon={<Save className="w-3.5 h-3.5" />}>Guardar</Button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Modal historial */}
+      <Modal isOpen={showHistory} onClose={() => setShowHistory(false)} title="Historial de costos" size="xl">
+        <div className="p-6">
+          <div className="flex justify-end mb-3">
+            <Button variant="secondary" size="sm" onClick={downloadHistory} leftIcon={<Download className="w-4 h-4" />}>Descargar Excel</Button>
+          </div>
+          {history.length === 0 ? (
+            <EmptyState icon={<History className="w-12 h-12" />} title="Sin cambios de costo registrados" description="Cada vez que un insumo cambie de costo (por una compra), aparecerá aquí." />
+          ) : (
+            <div className="overflow-x-auto max-h-[60vh]">
+              <table className="suma-table">
+                <thead><tr><th>Fecha</th><th>Insumo</th><th>Antes</th><th>Después</th><th>Variación</th><th>Tipo</th></tr></thead>
+                <tbody>
+                  {history.map((r) => {
+                    const diff = r.old_cost != null ? r.new_cost - r.old_cost : null;
+                    return (
+                      <tr key={r.id}>
+                        <td className="text-xs text-gray-500">{new Date(r.changed_at).toLocaleDateString('es-CO')}</td>
+                        <td className="font-medium">{materialName(r.material_id)}</td>
+                        <td className="font-mono text-sm">{r.old_cost != null ? formatCOP(r.old_cost) : '—'}</td>
+                        <td className="font-mono text-sm">{formatCOP(r.new_cost)}</td>
+                        <td className={`font-mono text-sm ${diff != null && diff > 0 ? 'text-red-600' : diff != null && diff < 0 ? 'text-green-600' : ''}`}>
+                          {diff != null ? (diff > 0 ? '+' : '') + formatCOP(diff) : '—'}
+                        </td>
+                        <td><Badge variant="gray">{r.change_kind}</Badge></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Modal>
+    </div>
   );
 }
