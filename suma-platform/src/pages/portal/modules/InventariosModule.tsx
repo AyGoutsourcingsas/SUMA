@@ -26,6 +26,7 @@ import {
 import { downloadAsExcel } from '@/lib/excelExport';
 import { ProveedoresDashboard } from './ProveedoresDashboard';
 import { ExcelImporterModal } from '@/components/costos/ExcelImporterModal';
+import { downloadPlantillaSUMA } from '@/lib/plantillaImportacion';
 import type { ItemGroup, Supplier, Unit, Material } from '@/types/domain';
 
 type Tab = 'stock' | 'movimientos' | 'costos' | 'proveedores';
@@ -160,6 +161,7 @@ export default function InventariosModule() {
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="secondary" size="sm" onClick={loadAll} leftIcon={<RefreshCw className="w-4 h-4" />}>Actualizar</Button>
           {canEdit && <Button size="sm" onClick={() => setShowMaterial(true)} leftIcon={<Plus className="w-4 h-4" />}>Nuevo insumo</Button>}
+          {canEdit && <Button size="sm" variant="secondary" onClick={() => downloadPlantillaSUMA()} leftIcon={<Download className="w-4 h-4" />}>Descargar plantilla</Button>}
           {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowImporter(true)} leftIcon={<Upload className="w-4 h-4" />}>Importar Excel</Button>}
           {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowPurchase(true)} leftIcon={<ShoppingCart className="w-4 h-4" />}>Registrar compra</Button>}
           {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowAdjust(true)} leftIcon={<SlidersHorizontal className="w-4 h-4" />}>Ajuste</Button>}
