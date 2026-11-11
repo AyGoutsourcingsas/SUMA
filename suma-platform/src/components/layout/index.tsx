@@ -3,7 +3,7 @@
 // ============================================================
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { Menu, X, Moon, Sun, ChevronDown } from 'lucide-react';
+import { Menu, X, Moon, Sun } from 'lucide-react';
 import { Logo, Button } from '@/components/ui';
 import { useAppStore } from '@/store/AppStore';
 import { BRAND } from '@/config/brand';
@@ -176,11 +176,12 @@ export function PublicLayout() {
 import {
   LayoutDashboard, Users, CheckSquare, BookOpen,
   Package, Calculator, TrendingUp, Settings,
-  LogOut, Bell, ChevronRight, Building2,
+  LogOut, Bell, Building2,
 } from 'lucide-react';
-import { useAppStore as _useAppStore } from '@/store/AppStore';
+import { useAppStore as _useAppStore, useIsSuperAdmin, useRoleLabel } from '@/store/AppStore';
 import { signOut } from '@/services/auth';
 import { useNavigate } from 'react-router-dom';
+import { MODULES_CONFIG } from '@/config/brand';
 import type { ModuleId } from '@/types/domain';
 
 const MODULE_ICONS: Record<ModuleId, React.ReactNode> = {
@@ -205,11 +206,17 @@ export function PortalLayout() {
   const { state, dispatch } = _useAppStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const isSuperAdmin = useIsSuperAdmin();
+  const roleLabel = useRoleLabel();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const activeModules = state.modules.filter(
-    (m) => m.status === 'activo' || m.status === 'en_prueba'
-  );
+  // Superadmin: ve TODOS los módulos (revisión/QA), sin importar contratación.
+  // Resto: solo módulos activos o en prueba de su empresa.
+  const navModules: { module_id: ModuleId; name: string }[] = isSuperAdmin
+    ? MODULES_CONFIG.map((mc) => ({ module_id: mc.id, name: mc.name }))
+    : state.modules
+        .filter((m) => m.status === 'activo' || m.status === 'en_prueba')
+        .map((m) => ({ module_id: m.module_id as ModuleId, name: m.name }));
 
   const handleSignOut = async () => {
     await signOut();
@@ -248,14 +255,14 @@ export function PortalLayout() {
             active={location.pathname === '/portal'}
           />
 
-          {activeModules.length > 0 && (
+          {navModules.length > 0 && (
             <>
               {sidebarOpen && (
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 pt-4 pb-1">
-                  Módulos
+                  {isSuperAdmin ? 'Módulos · Revisión SUMA' : 'Módulos'}
                 </p>
               )}
-              {activeModules.map((mod) => (
+              {navModules.map((mod) => (
                 <NavItem
                   key={mod.module_id}
                   href={`/portal/modulos/${mod.module_id}`}
@@ -341,7 +348,7 @@ export function PortalLayout() {
                   {state.user.name}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {state.user.role === 'owner' ? 'Propietario' : state.user.role === 'admin' ? 'Administrador' : 'Usuario'}
+                  {roleLabel}
                 </p>
               </div>
             </div>

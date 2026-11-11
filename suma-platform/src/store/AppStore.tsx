@@ -86,14 +86,69 @@ export function useAppStore() {
   return ctx;
 }
 
-export function useIsAdmin() {
+// ─────────────────────────────────────────
+// Perfiles / permisos
+// ─────────────────────────────────────────
+
+/** Perfil SUMA: acceso total a todas las empresas y todos los módulos. */
+export function useIsSuperAdmin() {
   const { state } = useAppStore();
-  return state.user?.role === 'owner' || state.user?.role === 'admin';
+  return state.user?.role === 'superadmin';
 }
 
+/** Jefe de empresa (owner/admin) o superadmin. Puede gestionar la empresa. */
+export function useIsAdmin() {
+  const { state } = useAppStore();
+  const role = state.user?.role;
+  return role === 'superadmin' || role === 'owner' || role === 'admin';
+}
+
+/**
+ * ¿Puede CREAR / EDITAR / ELIMINAR dentro de un módulo?
+ * superadmin y admin/owner sí; el perfil 'user' solo ejecuta tareas (no).
+ */
+export function useCanEdit() {
+  const { state } = useAppStore();
+  const role = state.user?.role;
+  return role === 'superadmin' || role === 'owner' || role === 'admin';
+}
+
+/**
+ * ¿Puede GESTIONAR la empresa? (configuración, usuarios, facturación)
+ * Solo admin/owner de la empresa y superadmin.
+ */
+export function useCanManageCompany() {
+  const { state } = useAppStore();
+  const role = state.user?.role;
+  return role === 'superadmin' || role === 'owner' || role === 'admin';
+}
+
+/**
+ * ¿Tiene acceso al módulo?
+ * - superadmin: siempre (revisa todos los módulos sin importar contratación).
+ * - resto: solo si la empresa lo tiene activo o en prueba.
+ */
 export function useHasModule(moduleId: string) {
   const { state } = useAppStore();
+  if (state.user?.role === 'superadmin') return true;
   return state.modules.some(
     (m) => m.module_id === moduleId && (m.status === 'activo' || m.status === 'en_prueba')
   );
+}
+
+/** Etiqueta legible del perfil actual. */
+export function useRoleLabel() {
+  const { state } = useAppStore();
+  switch (state.user?.role) {
+    case 'superadmin':
+      return 'Superadministrador SUMA';
+    case 'owner':
+      return 'Propietario';
+    case 'admin':
+      return 'Administrador';
+    case 'user':
+      return 'Usuario';
+    default:
+      return '—';
+  }
 }

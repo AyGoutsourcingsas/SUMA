@@ -52,9 +52,10 @@ export default function ModuleWorkspace() {
 
   if (!moduleId) return <Navigate to="/portal" />;
 
-  // Para demo/dev: permitir acceso si los módulos no están cargados aún
-  // En producción con RLS real, `hasModule` sería el guard
-  
+  // Guard de acceso: superadmin pasa siempre (useHasModule => true).
+  // admin/user solo si la empresa tiene el módulo activo o en prueba.
+  if (!hasModule) return <ModuleNotFound />;
+
   switch (moduleId) {
     case 'costos':
       return <CostosModule />;

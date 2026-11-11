@@ -3,7 +3,7 @@
 // ============================================================
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Check, AlertCircle, ArrowRight, Table, Layers } from 'lucide-react';
+import { Upload, FileSpreadsheet, Check, ArrowRight, Layers } from 'lucide-react';
 import { Button, Modal, Alert, Badge } from '@/components/ui';
 import { formatCOP } from '@/config/brand';
 import { upsertInventoryItems } from '@/services/supabaseDataProvider';

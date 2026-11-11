@@ -1,13 +1,13 @@
 // ============================================================
 // SUMA Platform — Módulo Inventarios
 // ============================================================
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  Package, Plus, Search, Edit2, Trash2, Upload,
-  AlertTriangle, X, Save, RefreshCw,
+  Package, Plus, Search, Edit2, Trash2,
+  AlertTriangle, Save, RefreshCw,
 } from 'lucide-react';
 import {
-  Button, Card, CardHeader, CardBody, Field, SelectField,
+  Button, Card, Field, SelectField,
   Modal, Badge, EmptyState, Alert, StatCard, Spinner,
 } from '@/components/ui';
 import { useAppStore } from '@/store/AppStore';
@@ -15,7 +15,6 @@ import { formatCOP } from '@/config/brand';
 import {
   fetchInventoryItems, createInventoryItem,
   updateInventoryItem, deleteInventoryItem,
-  upsertInventoryItems,
 } from '@/services/supabaseDataProvider';
 import { MOCK_INVENTORY_ITEMS } from '@/data/mocks';
 import type { InventoryItem } from '@/types/domain';

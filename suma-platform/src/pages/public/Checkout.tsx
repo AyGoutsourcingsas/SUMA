@@ -1,7 +1,7 @@
 // ============================================================
 // SUMA Platform — Checkout (Wompi)
 // ============================================================
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CreditCard, Building2, ChevronRight } from 'lucide-react';
 import { Button, Field, Card, CardBody, CardHeader } from '@/components/ui';
