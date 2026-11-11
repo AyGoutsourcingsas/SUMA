@@ -140,12 +140,22 @@ export interface MaterialInput {
   units_per_purchase?: number | null;
   stock_min?: number;
   note?: string | null;
+  /** Costo inicial por unidad base (opcional): permite costear recetas
+   *  sin registrar una compra formal. Si se envía, fija el costo del
+   *  insumo (dispara historial y recálculo de recetas por trigger). */
+  initial_cost?: number | null;
 }
 
 export async function createMaterial(companyId: string, input: MaterialInput): Promise<Material> {
+  const { initial_cost, ...rest } = input;
   const { data, error } = await supabase
     .from('materials')
-    .insert({ ...input, company_id: companyId, stock_min: input.stock_min ?? 0 })
+    .insert({
+      ...rest,
+      company_id: companyId,
+      stock_min: input.stock_min ?? 0,
+      unit_cost_per_base: initial_cost != null && initial_cost > 0 ? initial_cost : 0,
+    })
     .select().single();
   if (error) throw error;
   return data;
@@ -372,4 +382,94 @@ export async function fetchSupplierPriceVariation(): Promise<SupplierPriceVariat
     .from('supplier_price_variation').select('*').order('variacion_pct', { ascending: false });
   if (error) throw error;
   return (data ?? []) as SupplierPriceVariation[];
+}
+
+// ─────────────────────────────────────────
+// Importación de insumos desde Excel (al nuevo esquema)
+// Crea materiales, resolviendo grupo y proveedor por nombre.
+// Opcionalmente fija costo inicial y stock inicial (como ajuste).
+// ─────────────────────────────────────────
+export interface ImportMaterialRow {
+  sku?: string;
+  name: string;
+  base_unit: string;
+  unit_cost_per_base: number;
+  group_name?: string;
+  supplier?: string;
+  stock?: number;
+}
+
+export interface ImportResult {
+  created: number;
+  skipped: number;
+  errors: { row: number; name: string; reason: string }[];
+}
+
+export async function importMaterials(
+  companyId: string,
+  rows: ImportMaterialRow[],
+): Promise<ImportResult> {
+  const result: ImportResult = { created: 0, skipped: 0, errors: [] };
+
+  // precargar grupos y proveedores existentes
+  const [groups, suppliers, existing, locations] = await Promise.all([
+    fetchGroups(), fetchSuppliers(), fetchMaterials(), fetchLocations(),
+  ]);
+  const groupByName = new Map(groups.map((g) => [g.name.toLowerCase(), g.id]));
+  const supplierByName = new Map(suppliers.map((s) => [s.name.toLowerCase(), s.id]));
+  const existingNames = new Set(existing.map((m) => m.name.toLowerCase()));
+  const defaultLoc = locations.find((l) => l.is_default)?.id ?? locations[0]?.id ?? null;
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    try {
+      if (!r.name?.trim()) { result.errors.push({ row: i + 1, name: r.name ?? '', reason: 'Sin nombre' }); continue; }
+      if (existingNames.has(r.name.trim().toLowerCase())) { result.skipped++; continue; }
+
+      // grupo (crear si no existe)
+      let groupId: string | null = null;
+      if (r.group_name?.trim()) {
+        const key = r.group_name.trim().toLowerCase();
+        groupId = groupByName.get(key) ?? null;
+        if (!groupId) {
+          const g = await createGroup(companyId, r.group_name.trim());
+          groupId = g.id; groupByName.set(key, g.id);
+        }
+      }
+
+      // proveedor (crear si no existe)
+      let supplierId: string | null = null;
+      if (r.supplier?.trim()) {
+        const key = r.supplier.trim().toLowerCase();
+        supplierId = supplierByName.get(key) ?? null;
+        if (!supplierId) {
+          const s = await createSupplier(companyId, r.supplier.trim());
+          supplierId = s.id; supplierByName.set(key, s.id);
+        }
+      }
+
+      // crear material con costo inicial
+      const mat = await createMaterial(companyId, {
+        name: r.name.trim(),
+        code: r.sku?.trim() || null,
+        group_id: groupId,
+        base_unit: r.base_unit?.trim() || 'Und',
+        supplier_id: supplierId,
+        initial_cost: r.unit_cost_per_base > 0 ? r.unit_cost_per_base : null,
+      });
+      existingNames.add(r.name.trim().toLowerCase());
+
+      // stock inicial como ajuste de inventario (si viene)
+      if (r.stock && r.stock !== 0) {
+        await createAdjustment(companyId, {
+          material_id: mat.id, location_id: defaultLoc,
+          quantity: r.stock, reason: 'Stock inicial (importación Excel)',
+        });
+      }
+      result.created++;
+    } catch (e) {
+      result.errors.push({ row: i + 1, name: r.name ?? '', reason: (e as Error).message });
+    }
+  }
+  return result;
 }

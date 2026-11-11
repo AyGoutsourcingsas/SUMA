@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { Upload, FileSpreadsheet, Check, ArrowRight, Layers } from 'lucide-react';
 import { Button, Modal, Alert, Badge } from '@/components/ui';
 import { formatCOP } from '@/config/brand';
-import { upsertInventoryItems } from '@/services/supabaseDataProvider';
+import { importMaterials, type ImportMaterialRow } from '@/services/modules/inventario';
 import { useAppStore } from '@/store/AppStore';
 
 interface Props {
@@ -239,8 +239,7 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
       const supplier = columnMapping.supplier ? String(row[columnMapping.supplier] || '').trim() : '';
       const stockVal = columnMapping.stock ? parseFloat(row[columnMapping.stock]) || 0 : 0;
 
-      return {
-        company_id: state.company?.id || 'demo',
+      const item: ImportMaterialRow = {
         sku,
         name,
         base_unit: baseUnit,
@@ -248,23 +247,31 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
         group_name: groupName || undefined,
         supplier: supplier || undefined,
         stock: stockVal,
-        stock_min: 0,
       };
+      return item;
     })
-    .filter((item): item is NonNullable<typeof item> => item !== null && item.unit_cost_per_base > 0);
+    .filter((item): item is ImportMaterialRow => item !== null && item.name.length > 0);
 
   const handleSaveToSupabase = async () => {
     if (preparedItems.length === 0) {
       setError('No se encontraron filas válidas para importar.');
       return;
     }
+    const companyId = state.company?.id;
+    if (!companyId) {
+      setError('Selecciona una empresa activa antes de importar (barra superior).');
+      return;
+    }
 
     setSaving(true);
     setError(null);
     try {
-      const companyId = state.company?.id || 'demo';
-      await upsertInventoryItems(preparedItems, companyId);
-      onImportSuccess(preparedItems.length);
+      const res = await importMaterials(companyId, preparedItems);
+      let msg = `Se importaron ${res.created} insumos.`;
+      if (res.skipped) msg += ` ${res.skipped} ya existían (omitidos).`;
+      if (res.errors.length) msg += ` ${res.errors.length} con error.`;
+      onImportSuccess(res.created);
+      alert(msg);
       onClose();
       resetState();
     } catch (err: any) {
