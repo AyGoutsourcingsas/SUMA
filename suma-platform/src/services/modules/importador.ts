@@ -15,6 +15,8 @@ export interface ImportSummary {
   depreciacion: number;
   recetas: number;
   productos: number;
+  // filas leídas de cada hoja (diagnóstico)
+  filasLeidas?: { insumos: number; depreciacion: number; recetas: number; productos: number };
   errores: { hoja: string; fila: number; motivo: string }[];
 }
 
@@ -27,9 +29,35 @@ function slugCode(name: string): string {
     .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     .slice(0, 24) || 'REC';
 }
-const num = (v: unknown) => {
+/**
+ * Convierte a número. Si Excel ya lo entrega como number, se usa tal cual
+ * (es lo normal: Excel guarda 20.36 como número, no como texto). Para
+ * texto, detecta el separador decimal de forma inteligente:
+ *  - "1.234,56" (CO/EU) -> 1234.56
+ *  - "1,234.56" (US)    -> 1234.56
+ *  - "20.36" / "20,36"  -> 20.36
+ */
+const num = (v: unknown): number => {
   if (v == null || v === '') return 0;
-  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.,-]/g, '').replace(/\./g, '').replace(',', '.'));
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  let str = String(v).trim().replace(/[^0-9.,-]/g, '');
+  if (!str) return 0;
+  const lastComma = str.lastIndexOf(',');
+  const lastDot = str.lastIndexOf('.');
+  if (lastComma >= 0 && lastDot >= 0) {
+    // el separador que aparece más a la derecha es el decimal
+    if (lastComma > lastDot) str = str.replace(/\./g, '').replace(',', '.'); // CO/EU
+    else str = str.replace(/,/g, ''); // US
+  } else if (lastComma >= 0) {
+    // solo comas: si hay 1 coma y <=2 decimales, es decimal; si no, miles
+    const parts = str.split(',');
+    str = (parts.length === 2 && parts[1].length <= 2) ? str.replace(',', '.') : str.replace(/,/g, '');
+  } else if (lastDot >= 0) {
+    // solo puntos: si hay 1 punto y <=2 decimales, es decimal; si no, miles
+    const parts = str.split('.');
+    str = (parts.length === 2 && parts[1].length <= 2) ? str : str.replace(/\./g, '');
+  }
+  const n = parseFloat(str);
   return Number.isFinite(n) ? n : 0;
 };
 
@@ -41,7 +69,16 @@ export async function importTemplate(
   companyId: string,
   sheets: { insumos: RawRow[]; depreciacion: RawRow[]; recetas: RawRow[]; productos: RawRow[] },
 ): Promise<ImportSummary> {
-  const summary: ImportSummary = { insumos: 0, depreciacion: 0, recetas: 0, productos: 0, errores: [] };
+  const summary: ImportSummary = {
+    insumos: 0, depreciacion: 0, recetas: 0, productos: 0,
+    filasLeidas: {
+      insumos: sheets.insumos.length,
+      depreciacion: sheets.depreciacion.length,
+      recetas: sheets.recetas.length,
+      productos: sheets.productos.length,
+    },
+    errores: [],
+  };
 
   // ── Catálogos actuales (para resolver por nombre) ──
   const [gRes, sRes, mRes, lRes] = await Promise.all([

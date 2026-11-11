@@ -129,6 +129,11 @@ export function TemplateImporterModal({
               <SummaryCard label="Recetas" value={summary.recetas} />
               <SummaryCard label="Productos" value={summary.productos} />
             </div>
+            {summary.filasLeidas && (
+              <p className="text-xs text-gray-400">
+                Filas leídas del Excel — Insumos: {summary.filasLeidas.insumos} · Depreciación: {summary.filasLeidas.depreciacion} · Recetas: {summary.filasLeidas.recetas} · Productos: {summary.filasLeidas.productos}
+              </p>
+            )}
             {summary.errores.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 text-amber-600 mb-1">
