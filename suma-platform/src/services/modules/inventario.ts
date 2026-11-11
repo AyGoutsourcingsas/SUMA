@@ -1,0 +1,250 @@
+// ============================================================
+// SUMA ERP — Servicio de datos del módulo INVENTARIO
+// Opera sobre el Núcleo (materials, purchases, item_groups,
+// suppliers, units) + sedes y kárdex (migración 005).
+// Reemplaza al viejo supabaseDataProvider/inventory_items.
+// ============================================================
+import { supabase } from '@/services/supabase';
+import type {
+  Material, ItemGroup, Supplier, Unit,
+} from '@/types/domain';
+
+// ─────────────────────────────────────────
+// Tipos de lectura (vistas de stock)
+// ─────────────────────────────────────────
+export type StockStatus = 'OK' | 'REPONER' | 'AGOTADO';
+
+export interface StockRow {
+  company_id: string;
+  material_id: string;
+  code: string | null;
+  material_name: string;
+  base_unit: string;
+  group_id: string | null;
+  supplier_id: string | null;
+  stock_min: number;
+  unit_cost: number;
+  stock: number;
+  stock_value: number;
+  status: StockStatus;
+}
+
+export interface Location {
+  id: string;
+  company_id: string;
+  name: string;
+  code?: string | null;
+  address?: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+export type MovementType =
+  | 'ENTRADA_COMPRA' | 'SALIDA_VENTA' | 'REVERSO_VENTA'
+  | 'AJUSTE' | 'SALIDA_PRODUCCION' | 'TRASLADO';
+
+export interface InventoryMovement {
+  id: string;
+  company_id: string;
+  location_id: string | null;
+  material_id: string;
+  moved_at: string;
+  movement_type: MovementType;
+  quantity: number;
+  unit_cost: number;
+  reference_type?: string | null;
+  reference_id?: string | null;
+  reason?: string | null;
+  created_at: string;
+}
+
+// ─────────────────────────────────────────
+// Catálogos
+// ─────────────────────────────────────────
+export async function fetchUnits(): Promise<Unit[]> {
+  const { data, error } = await supabase.from('units').select('*').order('code');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchGroups(): Promise<ItemGroup[]> {
+  const { data, error } = await supabase
+    .from('item_groups').select('*').eq('kind', 'material')
+    .order('sort_order').order('name');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createGroup(companyId: string, name: string, parentId?: string | null): Promise<ItemGroup> {
+  const { data, error } = await supabase
+    .from('item_groups')
+    .insert({ company_id: companyId, name, kind: 'material', parent_id: parentId ?? null })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteGroup(id: string): Promise<void> {
+  const { error } = await supabase.from('item_groups').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function fetchSuppliers(): Promise<Supplier[]> {
+  const { data, error } = await supabase.from('suppliers').select('*').order('name');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createSupplier(companyId: string, name: string): Promise<Supplier> {
+  const { data, error } = await supabase
+    .from('suppliers').insert({ company_id: companyId, name }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+// ─────────────────────────────────────────
+// Sedes
+// ─────────────────────────────────────────
+export async function fetchLocations(): Promise<Location[]> {
+  const { data, error } = await supabase
+    .from('locations').select('*').eq('is_active', true).order('name');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createLocation(companyId: string, name: string, code?: string): Promise<Location> {
+  const { data, error } = await supabase
+    .from('locations')
+    .insert({ company_id: companyId, name, code: code ?? null })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+// ─────────────────────────────────────────
+// Materiales
+// ─────────────────────────────────────────
+export async function fetchMaterials(): Promise<Material[]> {
+  const { data, error } = await supabase.from('materials').select('*').order('name');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export interface MaterialInput {
+  code?: string | null;
+  name: string;
+  group_id?: string | null;
+  base_unit: string;
+  supplier_id?: string | null;
+  units_per_purchase?: number | null;
+  stock_min?: number;
+  note?: string | null;
+}
+
+export async function createMaterial(companyId: string, input: MaterialInput): Promise<Material> {
+  const { data, error } = await supabase
+    .from('materials')
+    .insert({ ...input, company_id: companyId, stock_min: input.stock_min ?? 0 })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateMaterial(id: string, input: Partial<MaterialInput>): Promise<Material> {
+  const { data, error } = await supabase
+    .from('materials').update(input).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deactivateMaterial(id: string): Promise<void> {
+  // No se borra: se inactiva (regla de negocio: nada se elimina).
+  const { error } = await supabase.from('materials').update({ is_active: false }).eq('id', id);
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────
+// Stock (vistas calculadas)
+// ─────────────────────────────────────────
+export async function fetchStockSummary(): Promise<StockRow[]> {
+  const { data, error } = await supabase
+    .from('stock_summary').select('*').order('material_name');
+  if (error) throw error;
+  return (data ?? []) as StockRow[];
+}
+
+// ─────────────────────────────────────────
+// Compras (generan movimiento de entrada por trigger)
+// ─────────────────────────────────────────
+export interface PurchaseInput {
+  material_id: string;
+  quantity: number;       // en unidad base del material
+  total_cost: number;     // valor pagado
+  purchased_at?: string;  // ISO date
+  supplier_id?: string | null;
+  location_id?: string | null;
+  note?: string | null;
+}
+
+export async function createPurchase(companyId: string, input: PurchaseInput): Promise<void> {
+  const { error } = await supabase.from('purchases').insert({
+    company_id: companyId,
+    material_id: input.material_id,
+    quantity: input.quantity,
+    total_cost: input.total_cost,
+    purchased_at: input.purchased_at ?? new Date().toISOString().slice(0, 10),
+    supplier_id: input.supplier_id ?? null,
+    location_id: input.location_id ?? null,
+    note: input.note ?? null,
+    affects_stock: true,
+  });
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────
+// Ajustes (entrada/salida manual con motivo obligatorio)
+// ─────────────────────────────────────────
+export interface AdjustmentInput {
+  material_id: string;
+  location_id?: string | null;
+  quantity: number;   // + entra, - sale
+  reason: string;     // obligatorio
+}
+
+export async function createAdjustment(companyId: string, input: AdjustmentInput): Promise<void> {
+  const { error } = await supabase.from('inventory_movements').insert({
+    company_id: companyId,
+    location_id: input.location_id ?? null,
+    material_id: input.material_id,
+    movement_type: 'AJUSTE',
+    quantity: input.quantity,
+    unit_cost: 0,
+    reference_type: 'adjustment',
+    reason: input.reason,
+  });
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────
+// Kárdex / movimientos (con filtros)
+// ─────────────────────────────────────────
+export interface MovementFilters {
+  materialId?: string;
+  locationId?: string;
+  type?: MovementType;
+  from?: string; // ISO date
+  to?: string;   // ISO date
+}
+
+export async function fetchMovements(filters: MovementFilters = {}): Promise<InventoryMovement[]> {
+  let q = supabase.from('inventory_movements').select('*').order('moved_at', { ascending: false });
+  if (filters.materialId) q = q.eq('material_id', filters.materialId);
+  if (filters.locationId) q = q.eq('location_id', filters.locationId);
+  if (filters.type) q = q.eq('movement_type', filters.type);
+  if (filters.from) q = q.gte('moved_at', filters.from);
+  if (filters.to) q = q.lte('moved_at', filters.to);
+  const { data, error } = await q.limit(500);
+  if (error) throw error;
+  return (data ?? []) as InventoryMovement[];
+}
