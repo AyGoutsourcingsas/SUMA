@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Package, Plus, Search, RefreshCw, FolderPlus, Folder, X,
   ShoppingCart, SlidersHorizontal, ListFilter, Boxes, Building2,
-  AlertTriangle, Save, FileText, History, Download, Settings2, Users,
+  AlertTriangle, Save, FileText, History, Download, Settings2, Users, Upload,
 } from 'lucide-react';
 import {
   Button, Card, Field, SelectField, Modal, Badge, EmptyState, Alert, Spinner, StatCard,
@@ -25,6 +25,7 @@ import {
 } from '@/services/modules/inventario';
 import { downloadAsExcel } from '@/lib/excelExport';
 import { ProveedoresDashboard } from './ProveedoresDashboard';
+import { ExcelImporterModal } from '@/components/costos/ExcelImporterModal';
 import type { ItemGroup, Supplier, Unit, Material } from '@/types/domain';
 
 type Tab = 'stock' | 'movimientos' | 'costos' | 'proveedores';
@@ -76,6 +77,7 @@ export default function InventariosModule() {
   const [showMaterial, setShowMaterial] = useState(false);
   const [showPurchase, setShowPurchase] = useState(false);
   const [showAdjust, setShowAdjust] = useState(false);
+  const [showImporter, setShowImporter] = useState(false);
 
   const loadAll = async () => {
     setLoading(true);
@@ -158,6 +160,7 @@ export default function InventariosModule() {
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="secondary" size="sm" onClick={loadAll} leftIcon={<RefreshCw className="w-4 h-4" />}>Actualizar</Button>
           {canEdit && <Button size="sm" onClick={() => setShowMaterial(true)} leftIcon={<Plus className="w-4 h-4" />}>Nuevo insumo</Button>}
+          {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowImporter(true)} leftIcon={<Upload className="w-4 h-4" />}>Importar Excel</Button>}
           {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowPurchase(true)} leftIcon={<ShoppingCart className="w-4 h-4" />}>Registrar compra</Button>}
           {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowAdjust(true)} leftIcon={<SlidersHorizontal className="w-4 h-4" />}>Ajuste</Button>}
         </div>
@@ -365,6 +368,12 @@ export default function InventariosModule() {
           onClose={() => setShowAdjust(false)}
           onSaved={async () => { setShowAdjust(false); await loadAll(); }} />
       )}
+
+      <ExcelImporterModal
+        isOpen={showImporter}
+        onClose={() => setShowImporter(false)}
+        onImportSuccess={async () => { await loadAll(); }}
+      />
     </div>
   );
 }
@@ -404,6 +413,7 @@ function MaterialForm({ companyId, units, groups, suppliers, onClose, onSaved, o
   const [baseUnit, setBaseUnit] = useState(units[0]?.code ?? 'Und');
   const [supplierId, setSupplierId] = useState('');
   const [stockMin, setStockMin] = useState(0);
+  const [initialCost, setInitialCost] = useState(0);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -414,6 +424,7 @@ function MaterialForm({ companyId, units, groups, suppliers, onClose, onSaved, o
       await createMaterial(companyId, {
         name: name.trim(), code: code || null, group_id: groupId || null,
         base_unit: baseUnit, supplier_id: supplierId || null, stock_min: stockMin,
+        initial_cost: initialCost > 0 ? initialCost : null,
       });
       onSaved();
     } catch (e) { setErr((e as Error).message || 'No se pudo guardar.'); } finally { setSaving(false); }
@@ -444,6 +455,7 @@ function MaterialForm({ companyId, units, groups, suppliers, onClose, onSaved, o
             <option value="__new__">+ Nuevo proveedor…</option>
           </SelectField>
           <Field label="Stock mínimo" type="number" value={stockMin} onChange={(e) => setStockMin(Number(e.target.value))} hint="Avisa 'Reponer' si baja de este nivel" />
+          <Field label={`Costo inicial por ${baseUnit} (opcional)`} type="number" value={initialCost} onChange={(e) => setInitialCost(Number(e.target.value))} hint="Para costear recetas sin registrar compra. Luego las compras lo actualizan." />
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
