@@ -26,7 +26,6 @@ import {
 import { downloadAsExcel } from '@/lib/excelExport';
 import { ProveedoresDashboard } from './ProveedoresDashboard';
 import { ExcelImporterModal } from '@/components/costos/ExcelImporterModal';
-import { downloadPlantillaSUMA } from '@/lib/plantillaImportacion';
 import type { ItemGroup, Supplier, Unit, Material } from '@/types/domain';
 
 type Tab = 'stock' | 'movimientos' | 'costos' | 'proveedores';
@@ -164,7 +163,7 @@ export default function InventariosModule() {
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="secondary" size="sm" onClick={loadAll} leftIcon={<RefreshCw className="w-4 h-4" />}>Actualizar</Button>
           {canEdit && <Button size="sm" onClick={() => setShowMaterial(true)} leftIcon={<Plus className="w-4 h-4" />}>Nuevo insumo</Button>}
-          {canEdit && <Button size="sm" variant="secondary" onClick={() => downloadPlantillaSUMA()} leftIcon={<Download className="w-4 h-4" />}>Descargar plantilla</Button>}
+          {canEdit && <Button size="sm" variant="secondary" onClick={() => window.open('/Plantilla_Costos_SUMA.xlsx', '_blank')} leftIcon={<Download className="w-4 h-4" />}>Descargar plantilla</Button>}
           {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowImporter(true)} leftIcon={<Upload className="w-4 h-4" />}>Importar Excel</Button>}
           {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowPurchase(true)} leftIcon={<ShoppingCart className="w-4 h-4" />}>Registrar compra</Button>}
           {canEdit && <Button size="sm" variant="secondary" onClick={() => setShowAdjust(true)} leftIcon={<SlidersHorizontal className="w-4 h-4" />}>Ajuste</Button>}
@@ -405,7 +404,7 @@ export default function InventariosModule() {
         <MaterialForm companyId={companyId} units={units} groups={groups} suppliers={suppliers}
           onClose={() => setShowMaterial(false)}
           onSaved={async () => { setShowMaterial(false); await loadAll(); }}
-          onNewSupplier={async (name) => { const s = await createSupplier(companyId, name); setSuppliers(await fetchSuppliers()); return s; }} />
+          onNewSupplier={async (name, phone) => { const s = await createSupplier(companyId, name, phone); setSuppliers(await fetchSuppliers()); return s; }} />
       )}
 
       {showPurchase && (
@@ -456,7 +455,7 @@ function GroupButton({ active, onClick, icon, label }: { active: boolean; onClic
 
 function MaterialForm({ companyId, units, groups, suppliers, onClose, onSaved, onNewSupplier }: {
   companyId: string; units: Unit[]; groups: ItemGroup[]; suppliers: Supplier[];
-  onClose: () => void; onSaved: () => void; onNewSupplier: (name: string) => Promise<Supplier>;
+  onClose: () => void; onSaved: () => void; onNewSupplier: (name: string, phone?: string | null) => Promise<Supplier>;
 }) {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
@@ -498,7 +497,10 @@ function MaterialForm({ companyId, units, groups, suppliers, onClose, onSaved, o
           <SelectField label="Proveedor" value={supplierId} onChange={(e) => {
             if (e.target.value === '__new__') {
               const n = window.prompt('Nombre del nuevo proveedor:');
-              if (n && n.trim()) onNewSupplier(n.trim()).then((s) => setSupplierId(s.id));
+              if (n && n.trim()) {
+                const tel = window.prompt('Número / teléfono del proveedor (opcional):') ?? '';
+                onNewSupplier(n.trim(), tel.trim()).then((s) => setSupplierId(s.id));
+              }
             } else setSupplierId(e.target.value);
           }}>
             <option value="">(Sin proveedor)</option>

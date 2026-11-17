@@ -106,7 +106,8 @@ export async function importTemplate(
     if (groupByName.has(key)) return groupByName.get(key)!;
     const { data, error } = await supabase.from('item_groups').insert({ company_id: companyId, name, kind: 'material' }).select('id').single();
     if (error) throw error;
-    groupByName.set(key, data.id); return data.id;
+    const id = (data as { id: string }).id;
+    groupByName.set(key, id); return id;
   };
   const ensureSupplier = async (name: string): Promise<string | null> => {
     if (!name) return null;
@@ -114,7 +115,8 @@ export async function importTemplate(
     if (supplierByName.has(key)) return supplierByName.get(key)!;
     const { data, error } = await supabase.from('suppliers').insert({ company_id: companyId, name }).select('id').single();
     if (error) throw error;
-    supplierByName.set(key, data.id); return data.id;
+    const id = (data as { id: string }).id;
+    supplierByName.set(key, id); return id;
   };
 
   // ── 1) INSUMOS ──────────────────────────────────────
