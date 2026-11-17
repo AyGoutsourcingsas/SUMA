@@ -187,6 +187,7 @@ import type { ModuleId, Company } from '@/types/domain';
 const MODULE_ICONS: Record<ModuleId, React.ReactNode> = {
   rrhh: <Users className="w-5 h-5" />,
   productividad: <CheckSquare className="w-5 h-5" />,
+  contabilidad: <Building2 className="w-5 h-5" />,
   inventarios: <Package className="w-5 h-5" />,
   costos: <Calculator className="w-5 h-5" />,
   ventas: <TrendingUp className="w-5 h-5" />,
@@ -195,6 +196,7 @@ const MODULE_ICONS: Record<ModuleId, React.ReactNode> = {
 const MODULE_NAMES: Record<ModuleId, string> = {
   rrhh: 'RRHH',
   productividad: 'Productividad',
+  contabilidad: 'Contabilidad',
   inventarios: 'Inventarios',
   costos: 'Costos',
   ventas: 'Ventas',

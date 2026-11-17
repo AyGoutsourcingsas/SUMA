@@ -93,14 +93,15 @@ export function useAppStore() {
 /** Perfil SUMA: acceso total a todas las empresas y todos los módulos. */
 export function useIsSuperAdmin() {
   const { state } = useAppStore();
-  return state.user?.role === 'superadmin';
+  const role = state.user?.role;
+  return role === 'super_admin' || role === 'superadmin';
 }
 
 /** Jefe de empresa (owner/admin) o superadmin. Puede gestionar la empresa. */
 export function useIsAdmin() {
   const { state } = useAppStore();
   const role = state.user?.role;
-  return role === 'superadmin' || role === 'owner' || role === 'admin';
+  return role === 'super_admin' || role === 'superadmin' || role === 'owner' || role === 'admin';
 }
 
 /**
@@ -110,7 +111,7 @@ export function useIsAdmin() {
 export function useCanEdit() {
   const { state } = useAppStore();
   const role = state.user?.role;
-  return role === 'superadmin' || role === 'owner' || role === 'admin';
+  return role === 'super_admin' || role === 'superadmin' || role === 'owner' || role === 'admin';
 }
 
 /**
@@ -120,7 +121,7 @@ export function useCanEdit() {
 export function useCanManageCompany() {
   const { state } = useAppStore();
   const role = state.user?.role;
-  return role === 'superadmin' || role === 'owner' || role === 'admin';
+  return role === 'super_admin' || role === 'superadmin' || role === 'owner' || role === 'admin';
 }
 
 /**
@@ -130,7 +131,8 @@ export function useCanManageCompany() {
  */
 export function useHasModule(moduleId: string) {
   const { state } = useAppStore();
-  if (state.user?.role === 'superadmin') return true;
+  const role = state.user?.role;
+  if (role === 'super_admin' || role === 'superadmin') return true;
   return state.modules.some(
     (m) => m.module_id === moduleId && (m.status === 'activo' || m.status === 'en_prueba')
   );
@@ -150,6 +152,7 @@ export function useActiveCompanyId(): string {
 export function useRoleLabel() {
   const { state } = useAppStore();
   switch (state.user?.role) {
+    case 'super_admin':
     case 'superadmin':
       return 'Superadministrador SUMA';
     case 'owner':

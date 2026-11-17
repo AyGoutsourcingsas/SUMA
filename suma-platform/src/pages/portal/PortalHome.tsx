@@ -4,7 +4,7 @@
 import { Link } from 'react-router-dom';
 import {
   ArrowRight, Users, Package, Calculator, TrendingUp,
-  CheckSquare, AlertCircle, Plus,
+  CheckSquare, AlertCircle, Plus, Building2,
 } from 'lucide-react';
 import { Card, StatCard, Badge } from '@/components/ui';
 import { useAppStore, useIsSuperAdmin } from '@/store/AppStore';
@@ -14,6 +14,7 @@ import type { ModuleId } from '@/types/domain';
 const MODULE_ICONS: Record<ModuleId, React.ReactNode> = {
   rrhh: <Users className="w-5 h-5" />,
   productividad: <CheckSquare className="w-5 h-5" />,
+  contabilidad: <Building2 className="w-5 h-5" />,
   inventarios: <Package className="w-5 h-5" />,
   costos: <Calculator className="w-5 h-5" />,
   ventas: <TrendingUp className="w-5 h-5" />,

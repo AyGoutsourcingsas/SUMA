@@ -17,10 +17,14 @@ export function convertQuantity(
   fromUnit: Unit,
   toUnit: Unit,
 ): number | null {
-  if (fromUnit.base_code !== toUnit.base_code) return null;
-  const inBase = qty * fromUnit.factor; // a unidad base
-  if (toUnit.factor === 0) return null;
-  return inBase / toUnit.factor;
+  const fromBase = fromUnit.base_code ?? fromUnit.family ?? fromUnit.code;
+  const toBase = toUnit.base_code ?? toUnit.family ?? toUnit.code;
+  if (fromBase !== toBase) return null;
+  const fromFactor = fromUnit.factor ?? fromUnit.to_base_factor ?? 1;
+  const toFactor = toUnit.factor ?? toUnit.to_base_factor ?? 1;
+  const inBase = qty * fromFactor; // a unidad base
+  if (toFactor === 0) return null;
+  return inBase / toFactor;
 }
 
 /**

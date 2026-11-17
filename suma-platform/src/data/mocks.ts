@@ -68,6 +68,7 @@ export const MOCK_RECIPES: Recipe[] = [
     company_id: 'demo',
     product: 'Vela de Soya Lavanda Negra',
     code: 'VEL-LAV-001',
+    level: 2,
     yield_qty: 1,
     yield_unit: 'Und',
     margin: 0.35,
