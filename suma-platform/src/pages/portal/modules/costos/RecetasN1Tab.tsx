@@ -112,7 +112,7 @@ export default function RecetasN1Tab() {
           id, company_id, code, product, level, recipe_type,
           yield_qty, yield_unit, margin, total_cost, computed_price, final_price, notes, group_id,
           item_groups(name),
-          recipe_ingredients(id, kind:line_kind, material_id, depreciation_id, name, qty, unit, unit_cost_per_base, sort_order)
+          recipe_ingredients!recipe_id(id, kind:line_kind, material_id, depreciation_id, name, qty, unit, unit_cost_per_base, sort_order)
         `).eq('level', 1).order('product'),
         supabase.from('materials').select('id, name, base_unit, unit_cost_per_base').order('name'),
         supabase.from('depreciations').select('id, asset_name, method, estimated_uses, useful_life_months, units_per_month, total_cost, salvage_value').order('asset_name'),
@@ -321,7 +321,7 @@ export default function RecetasN1Tab() {
           <div>
             <p className="font-semibold text-sm text-amber-800 dark:text-amber-300">Recetas Nivel 1 — Subrecetas y componentes base</p>
             <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-              Son los productos intermedios: <em>cera de color azul, molde de Stitch, etiqueta de Harry Potter...</em><br />
+              Son los componentes intermedios que preparas y luego reutilizas (mezclas, piezas, empaques, etiquetas…).<br />
               Se construyen con <strong>insumos del inventario</strong> y <strong>costos de depreciación</strong>. Luego se usan como ingrediente en Recetas N2.
             </p>
           </div>
@@ -330,7 +330,8 @@ export default function RecetasN1Tab() {
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Filtrar:</label>
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
             className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900">
             <option value="">Todos los tipos</option>
@@ -354,7 +355,7 @@ export default function RecetasN1Tab() {
         <EmptyState
           icon={<Layers className="w-12 h-12" />}
           title="Sin subrecetas N1"
-          description={canEdit ? 'Crea subrecetas base como ceras de color, moldes, etiquetas que se reusan en los productos finales.' : 'No hay subrecetas N1 registradas.'}
+          description={canEdit ? 'Crea los componentes intermedios que preparas y reutilizas en tus productos finales.' : 'No hay subrecetas N1 registradas.'}
           action={canEdit ? <Button onClick={openCreate} leftIcon={<Plus className="w-4 h-4" />}>Crear subreceta N1</Button> : undefined}
         />
       ) : (
@@ -418,7 +419,7 @@ export default function RecetasN1Tab() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="col-span-2">
-              <Field label="Nombre *" required value={fname} onChange={(e) => setFname(e.target.value)} placeholder="Ej. Cera azul, Molde Stitch..." />
+              <Field label="Nombre *" required value={fname} onChange={(e) => setFname(e.target.value)} placeholder="Nombre de la subreceta o componente..." />
             </div>
             <Field label="Código" value={fcode} onChange={(e) => setFcode(e.target.value)} placeholder="N1-001" />
             <SelectField label="Tipo" value={ftype} onChange={(e) => setFtype(e.target.value)}>

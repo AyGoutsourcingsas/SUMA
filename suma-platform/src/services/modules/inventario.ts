@@ -96,9 +96,9 @@ export async function fetchSuppliers(): Promise<Supplier[]> {
   return data ?? [];
 }
 
-export async function createSupplier(companyId: string, name: string): Promise<Supplier> {
+export async function createSupplier(companyId: string, name: string, phone?: string | null): Promise<Supplier> {
   const { data, error } = await supabase
-    .from('suppliers').insert({ company_id: companyId, name }).select().single();
+    .from('suppliers').insert({ company_id: companyId, name, phone: phone || null }).select().single();
   if (error) throw error;
   return data;
 }

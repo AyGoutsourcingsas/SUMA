@@ -34,7 +34,7 @@ const TABS: TabDef[] = [
     icon: <Database className="w-4 h-4" />,
     color: 'text-suma-600',
     activeColor: 'bg-suma-600',
-    description: 'Inventario inicial de insumos: ceras, fragancias, colorantes, moldes...',
+    description: 'Inventario inicial de insumos: materias primas, empaques y materiales que compras.',
   },
   {
     id: 'depreciacion',
@@ -52,7 +52,7 @@ const TABS: TabDef[] = [
     icon: <Layers className="w-4 h-4" />,
     color: 'text-amber-600',
     activeColor: 'bg-amber-600',
-    description: 'Subrecetas: ceras de color, moldes, etiquetas que se usan en N2.',
+    description: 'Subrecetas y componentes intermedios que preparas y reutilizas en N2.',
   },
   {
     id: 'n2',
@@ -61,7 +61,7 @@ const TABS: TabDef[] = [
     icon: <Star className="w-4 h-4" />,
     color: 'text-green-600',
     activeColor: 'bg-green-600',
-    description: 'Productos finales: velas, figuras, kits. Usan insumos + N1.',
+    description: 'Productos finales que vendes. Usan insumos, depreciación y subrecetas N1.',
   },
 ];
 

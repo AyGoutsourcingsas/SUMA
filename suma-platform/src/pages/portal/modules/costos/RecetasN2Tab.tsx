@@ -90,6 +90,9 @@ export default function RecetasN2Tab() {
   const [deleting, setDeleting] = useState<RecipeN2 | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Filtro de la tabla (independiente del formulario)
+  const [filterType, setFilterType] = useState('');
+
   // Form
   const [fname, setFname] = useState('');
   const [fcode, setFcode] = useState('');
@@ -113,7 +116,7 @@ export default function RecetasN2Tab() {
           yield_qty, yield_unit, margin, gateway_fee_pct, total_cost,
           computed_price, final_price, notes, group_id,
           item_groups(name),
-          recipe_ingredients(id, line_kind, material_id, depreciation_id, recipe_ref_id,
+          recipe_ingredients!recipe_id(id, line_kind, material_id, depreciation_id, recipe_ref_id,
             name, qty, unit, unit_cost_per_base, sort_order)
         `).eq('level', 2).order('product'),
         supabase.from('materials').select('id, name, base_unit, unit_cost_per_base').order('name'),
@@ -190,6 +193,12 @@ export default function RecetasN2Tab() {
     const fp = ffinalPrice ? Number(ffinalPrice) : liveSuggestedPrice;
     return fp > 0 ? ((fp - liveTotalCost) / fp) * 100 : 0;
   }, [ffinalPrice, liveSuggestedPrice, liveTotalCost]);
+
+  // Lista filtrada por tipo para la tabla
+  const filteredRecipes = useMemo(
+    () => recipes.filter((r) => !filterType || r.recipe_type === filterType),
+    [recipes, filterType],
+  );
 
   const openCreate = () => {
     setEditing(null);
@@ -326,7 +335,7 @@ export default function RecetasN2Tab() {
           <div>
             <p className="font-semibold text-sm text-green-800 dark:text-green-300">Recetas Nivel 2 — Productos finales</p>
             <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-              Son los productos que vendes: <em>Vela Stitch, Pokewax edición especial...</em><br />
+              Son los productos terminados que vendes a tus clientes.<br />
               Pueden usar <strong>insumos del inventario</strong>, <strong>depreciaciones</strong> y <strong>subrecetas N1</strong> como ingrediente.
             </p>
           </div>
@@ -335,8 +344,9 @@ export default function RecetasN2Tab() {
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex gap-2">
-          <select value={ftype} onChange={(e) => setFtype(e.target.value)}
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Filtrar por tipo:</label>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
             className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900">
             <option value="">Todos los tipos</option>
             {RECIPE_TYPES_N2.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -350,11 +360,15 @@ export default function RecetasN2Tab() {
 
       {error && <Alert type="error">{error}</Alert>}
 
-      {recipes.length === 0 ? (
+      {filteredRecipes.length === 0 ? (
         <EmptyState
           icon={<Star className="w-12 h-12" />}
-          title="Sin productos N2"
-          description={canEdit ? 'Crea los productos finales que vendes, combinando insumos y subrecetas N1.' : 'No hay productos N2 registrados.'}
+          title={filterType ? `Sin productos del tipo ${filterType}` : 'Sin productos N2'}
+          description={
+            filterType
+              ? 'No hay productos de este tipo. Cambia el filtro o crea uno nuevo.'
+              : canEdit ? 'Crea los productos finales que vendes, combinando insumos y subrecetas N1.' : 'No hay productos N2 registrados.'
+          }
           action={canEdit ? <Button onClick={openCreate} leftIcon={<Plus className="w-4 h-4" />}>Crear producto N2</Button> : undefined}
         />
       ) : (
@@ -368,7 +382,7 @@ export default function RecetasN2Tab() {
                 </tr>
               </thead>
               <tbody>
-                {recipes.map((r) => {
+                {filteredRecipes.map((r) => {
                   const fp = r.final_price ?? r.computed_price;
                   const marginReal = fp > 0 ? ((fp - r.total_cost) / fp) * 100 : 0;
                   return (
@@ -406,7 +420,7 @@ export default function RecetasN2Tab() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="col-span-2">
-              <Field label="Nombre *" required value={fname} onChange={(e) => setFname(e.target.value)} placeholder="Ej. Vela Stitch edición especial..." />
+              <Field label="Nombre *" required value={fname} onChange={(e) => setFname(e.target.value)} placeholder="Nombre del producto final..." />
             </div>
             <Field label="Código" value={fcode} onChange={(e) => setFcode(e.target.value)} placeholder="N2-001" />
             <SelectField label="Tipo" value={ftype} onChange={(e) => setFtype(e.target.value)}>

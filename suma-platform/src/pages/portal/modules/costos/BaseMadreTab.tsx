@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Plus, Search, Edit2, Trash2, Eye, Upload, RefreshCw,
-  ChevronDown, ChevronRight, Package, AlertTriangle,
+  ChevronDown, ChevronRight, Package, AlertTriangle, FolderPlus, UserPlus,
 } from 'lucide-react';
 import {
   Button, Card, Field, SelectField, Modal, Badge, EmptyState, Alert, Spinner,
@@ -65,7 +65,7 @@ export default function BaseMadreTab() {
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
-  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string; phone?: string | null }[]>([]);
 
   const [search, setSearch] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
@@ -78,6 +78,18 @@ export default function BaseMadreTab() {
   const [deleting, setDeleting] = useState<MaterialRow | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+
+  // Crear grupo (modal independiente + inline desde el form de insumo)
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDesc, setNewGroupDesc] = useState('');
+  const [groupSaving, setGroupSaving] = useState(false);
+
+  // Crear proveedor inline (nombre + número)
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState('');
+  const [newSupplierPhone, setNewSupplierPhone] = useState('');
+  const [supplierSaving, setSupplierSaving] = useState(false);
 
   // Importador masivo simple (CSV / Excel pegado)
   const [showImporter, setShowImporter] = useState(false);
@@ -96,7 +108,7 @@ export default function BaseMadreTab() {
         `).order('name'),
         supabase.from('item_groups').select('*').eq('kind', 'material').order('name'),
         supabase.from('units').select('*').order('code'),
-        supabase.from('suppliers').select('id, name').order('name'),
+        supabase.from('suppliers').select('id, name, phone').order('name'),
       ]);
       if (mRes.error) throw mRes.error;
       if (gRes.error) throw gRes.error;
@@ -225,6 +237,68 @@ export default function BaseMadreTab() {
     }
   };
 
+  // Crear grupo nuevo (lo usa tanto el botón "+ Grupo" como el inline del form)
+  const handleCreateGroup = async (): Promise<string | null> => {
+    if (!newGroupName.trim()) { setError('Escribe un nombre para el grupo.'); return null; }
+    if (!companyId) { setError('No hay empresa activa. Selecciona una empresa en la barra superior.'); return null; }
+    setGroupSaving(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from('item_groups')
+        .insert({ company_id: companyId, name: newGroupName.trim(), kind: 'material', description: newGroupDesc.trim() || null })
+        .select('id, name, kind, parent_id, description')
+        .single();
+      if (err) throw err;
+      const created = data as GroupRow;
+      setGroups((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewGroupName('');
+      setNewGroupDesc('');
+      setShowGroupModal(false);
+      return created.id;
+    } catch (e: any) {
+      const msg = (e?.code === '23505' || /duplicate|unique/i.test(e?.message ?? ''))
+        ? `Ya existe un grupo llamado "${newGroupName.trim()}".`
+        : (e.message || 'No se pudo crear el grupo.');
+      setError(msg);
+      return null;
+    } finally {
+      setGroupSaving(false);
+    }
+  };
+
+  // Crear proveedor nuevo (nombre + número) desde el form de insumo
+  const handleCreateSupplier = async (): Promise<string | null> => {
+    if (!newSupplierName.trim()) { setError('Escribe el nombre del proveedor.'); return null; }
+    if (!companyId) { setError('No hay empresa activa. Selecciona una empresa en la barra superior.'); return null; }
+    setSupplierSaving(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from('suppliers')
+        .insert({ company_id: companyId, name: newSupplierName.trim(), phone: newSupplierPhone.trim() || null })
+        .select('id, name, phone')
+        .single();
+      if (err) throw err;
+      const created = data as { id: string; name: string; phone?: string | null };
+      setSuppliers((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      // Asignar automáticamente el proveedor recién creado al insumo en edición
+      setForm((f) => ({ ...f, supplier_id: created.id, supplier_name: created.name }));
+      setNewSupplierName('');
+      setNewSupplierPhone('');
+      setShowSupplierModal(false);
+      return created.id;
+    } catch (e: any) {
+      const msg = (e?.code === '23505' || /duplicate|unique/i.test(e?.message ?? ''))
+        ? `Ya existe un proveedor llamado "${newSupplierName.trim()}".`
+        : (e.message || 'No se pudo crear el proveedor.');
+      setError(msg);
+      return null;
+    } finally {
+      setSupplierSaving(false);
+    }
+  };
+
   // Parseo básico de CSV pegado
   const parseCSV = (text: string) => {
     const lines = text.trim().split('\n').filter(Boolean);
@@ -324,6 +398,9 @@ export default function BaseMadreTab() {
               <Button variant="secondary" size="sm" onClick={() => setShowImporter(true)} leftIcon={<Upload className="w-4 h-4" />}>
                 Importar masivo
               </Button>
+              <Button variant="outline" size="sm" onClick={() => { setNewGroupName(''); setNewGroupDesc(''); setShowGroupModal(true); }} leftIcon={<FolderPlus className="w-4 h-4" />}>
+                Nuevo grupo
+              </Button>
               <Button size="sm" onClick={openCreate} leftIcon={<Plus className="w-4 h-4" />}>
                 Nuevo insumo
               </Button>
@@ -380,9 +457,9 @@ export default function BaseMadreTab() {
                 </span>
               </button>
 
-              {/* Filas del grupo */}
+              {/* Filas del grupo — indentadas a la derecha con línea guía */}
               {!collapsedGroups.has(groupName) && (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto border-l-2 border-suma-200 dark:border-suma-800 ml-4">
                   <table className="suma-table">
                     <thead>
                       <tr>
@@ -462,10 +539,31 @@ export default function BaseMadreTab() {
               onChange={(e) => setForm((f) => ({ ...f, unit_cost_per_base: Number(e.target.value) }))}
               hint="Precio al que lo compras por unidad base"
             />
-            <SelectField label="Grupo" value={form.group_id ?? ''} onChange={(e) => setForm((f) => ({ ...f, group_id: e.target.value || null }))}>
-              <option value="">(Sin grupo)</option>
-              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </SelectField>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Grupo</label>
+              <div className="flex gap-2">
+                <select
+                  value={form.group_id ?? ''}
+                  onChange={(e) => {
+                    if (e.target.value === '__new__') { setNewGroupName(''); setNewGroupDesc(''); setShowGroupModal(true); return; }
+                    setForm((f) => ({ ...f, group_id: e.target.value || null }));
+                  }}
+                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
+                >
+                  <option value="">(Sin grupo)</option>
+                  {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  <option value="__new__">➕ Crear grupo nuevo…</option>
+                </select>
+                <button
+                  type="button"
+                  title="Crear grupo nuevo"
+                  onClick={() => { setNewGroupName(''); setNewGroupDesc(''); setShowGroupModal(true); }}
+                  className="flex-shrink-0 px-2 rounded-lg border border-gray-300 dark:border-gray-600 text-suma-600 hover:bg-suma-50 dark:hover:bg-suma-950"
+                >
+                  <FolderPlus className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <Field
@@ -481,10 +579,31 @@ export default function BaseMadreTab() {
               onChange={(e) => setForm((f) => ({ ...f, stock_min: Number(e.target.value) }))}
               hint="Alerta cuando baje de aquí"
             />
-            <SelectField label="Proveedor" value={form.supplier_id ?? ''} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value || null }))}>
-              <option value="">(Sin proveedor)</option>
-              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </SelectField>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proveedor</label>
+              <div className="flex gap-2">
+                <select
+                  value={form.supplier_id ?? ''}
+                  onChange={(e) => {
+                    if (e.target.value === '__new__') { setNewSupplierName(''); setNewSupplierPhone(''); setShowSupplierModal(true); return; }
+                    setForm((f) => ({ ...f, supplier_id: e.target.value || null }));
+                  }}
+                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
+                >
+                  <option value="">(Sin proveedor)</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  <option value="__new__">➕ Agregar proveedor…</option>
+                </select>
+                <button
+                  type="button"
+                  title="Agregar proveedor"
+                  onClick={() => { setNewSupplierName(''); setNewSupplierPhone(''); setShowSupplierModal(true); }}
+                  className="flex-shrink-0 px-2 rounded-lg border border-gray-300 dark:border-gray-600 text-suma-600 hover:bg-suma-50 dark:hover:bg-suma-950"
+                >
+                  <UserPlus className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field
@@ -624,6 +743,60 @@ export default function BaseMadreTab() {
             >
               Importar {importPreview.length > 0 ? `(${importPreview.length} ítems)` : ''}
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: Crear grupo */}
+      <Modal isOpen={showGroupModal} onClose={() => setShowGroupModal(false)} title="Nuevo grupo de insumos" size="sm">
+        <div className="p-6 space-y-4">
+          {error && <Alert type="error">{error}</Alert>}
+          <Field
+            label="Nombre del grupo *"
+            required
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            placeholder="Ej. EMPAQUES, MATERIALES, CERAS..."
+          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción (opcional)</label>
+            <textarea
+              value={newGroupDesc}
+              onChange={(e) => setNewGroupDesc(e.target.value)}
+              rows={2}
+              placeholder="¿Qué insumos agrupa esta categoría?"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
+            />
+          </div>
+          <p className="text-xs text-gray-500">El grupo se crea para la empresa activa. También puedes cargar grupos con el archivo de Excel.</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowGroupModal(false)}>Cancelar</Button>
+            <Button onClick={handleCreateGroup} loading={groupSaving} leftIcon={<FolderPlus className="w-4 h-4" />}>Crear grupo</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: Agregar proveedor (nombre + número) */}
+      <Modal isOpen={showSupplierModal} onClose={() => setShowSupplierModal(false)} title="Agregar proveedor" size="sm">
+        <div className="p-6 space-y-4">
+          {error && <Alert type="error">{error}</Alert>}
+          <Field
+            label="Nombre del proveedor *"
+            required
+            value={newSupplierName}
+            onChange={(e) => setNewSupplierName(e.target.value)}
+            placeholder="Ej. Distribuidora La 14"
+          />
+          <Field
+            label="Número / teléfono"
+            value={newSupplierPhone}
+            onChange={(e) => setNewSupplierPhone(e.target.value)}
+            placeholder="Ej. 3001234567"
+            hint="Esta información también se verá en Inventario."
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowSupplierModal(false)}>Cancelar</Button>
+            <Button onClick={handleCreateSupplier} loading={supplierSaving} leftIcon={<UserPlus className="w-4 h-4" />}>Agregar proveedor</Button>
           </div>
         </div>
       </Modal>
