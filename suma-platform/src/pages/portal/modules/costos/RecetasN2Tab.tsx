@@ -1,6 +1,6 @@
 // ============================================================
 // SUMA ERP — Costos / Recetas Nivel 2 (Productos finales)
-// Ej: Vela Stitch, Pokewax Harry Potter...
+// Productos terminados listos para la venta.
 // Ingredientes: MATERIAL + DEPRECIACION + RECETA_N1
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
@@ -110,14 +110,14 @@ export default function RecetasN2Tab() {
     setLoading(true);
     setError(null);
     try {
+      // Separamos el query de ingredients para evitar el error de ambigüedad
+      // PostgREST no puede elegir entre recipe_id y recipe_ref_id cuando hay 2 FKs
       const [rRes, mRes, dRes, n1Res, uRes, gRes] = await Promise.all([
         supabase.from('recipes').select(`
           id, company_id, code, product, level, recipe_type,
           yield_qty, yield_unit, margin, gateway_fee_pct, total_cost,
           computed_price, final_price, notes, group_id,
-          item_groups(name),
-          recipe_ingredients!recipe_id(id, line_kind, material_id, depreciation_id, recipe_ref_id,
-            name, qty, unit, unit_cost_per_base, sort_order)
+          item_groups(name)
         `).eq('level', 2).order('product'),
         supabase.from('materials').select('id, name, base_unit, unit_cost_per_base').order('name'),
         supabase.from('depreciations').select('id, asset_name, method, estimated_uses, useful_life_months, units_per_month, total_cost, salvage_value').order('asset_name'),
@@ -126,6 +126,21 @@ export default function RecetasN2Tab() {
         supabase.from('item_groups').select('id, name').eq('kind', 'recipe').order('name'),
       ]);
       if (rRes.error) throw rRes.error;
+
+      const recipeIds = (rRes.data ?? []).map((r: any) => r.id);
+      let ingredientsMap: Record<string, any[]> = {};
+      if (recipeIds.length > 0) {
+        const { data: ingData, error: ingErr } = await supabase
+          .from('recipe_ingredients')
+          .select('id, recipe_id, line_kind, material_id, depreciation_id, recipe_ref_id, name, qty, unit, unit_cost_per_base, sort_order')
+          .in('recipe_id', recipeIds)
+          .order('sort_order');
+        if (ingErr) throw ingErr;
+        for (const ing of ingData ?? []) {
+          if (!ingredientsMap[ing.recipe_id]) ingredientsMap[ing.recipe_id] = [];
+          ingredientsMap[ing.recipe_id].push(ing);
+        }
+      }
 
       const enrichedDeps = (dRes.data ?? []).map((d: any): DepOpt => {
         const base = d.total_cost - (d.salvage_value ?? 0);
@@ -151,20 +166,18 @@ export default function RecetasN2Tab() {
           name: r.product ?? r.name ?? '',
           level: 2 as const,
           group_name: r.item_groups?.name ?? '',
-          ingredients: (r.recipe_ingredients ?? [])
-            .sort((a: any, b: any) => a.sort_order - b.sort_order)
-            .map((ing: any) => ({
-              kind: ing.line_kind || 'MATERIAL',
-              material_id: ing.material_id,
-              depreciation_id: ing.depreciation_id,
-              recipe_ref_id: ing.recipe_ref_id,
-              name: ing.name,
-              qty: ing.qty,
-              unit: ing.unit,
-              unit_cost: ing.unit_cost_per_base,
-              line_cost: ing.qty * ing.unit_cost_per_base,
-              sort_order: ing.sort_order,
-            })),
+          ingredients: (ingredientsMap[r.id] ?? []).map((ing: any) => ({
+            kind: ing.line_kind || 'MATERIAL',
+            material_id: ing.material_id,
+            depreciation_id: ing.depreciation_id,
+            recipe_ref_id: ing.recipe_ref_id,
+            name: ing.name,
+            qty: ing.qty,
+            unit: ing.unit,
+            unit_cost: ing.unit_cost_per_base,
+            line_cost: ing.qty * ing.unit_cost_per_base,
+            sort_order: ing.sort_order,
+          })),
         }))
       );
     } catch (e: any) {
