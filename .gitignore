@@ -23,3 +23,8 @@ Thumbs.db
 
 # Local Netlify folder
 .netlify
+
+# Local helper scripts with secrets
+run_sql.cjs
+suma-platform/run_sql.cjs
+*.cjs
