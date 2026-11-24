@@ -5,7 +5,7 @@
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Plus, Edit2, Trash2, Eye, RefreshCw, ChevronDown, ChevronRight,
+  Plus, Search, Edit2, Trash2, Eye, RefreshCw, ChevronDown, ChevronRight,
   Layers, Calculator, AlertTriangle, Package, X,
 } from 'lucide-react';
 import {
@@ -55,7 +55,7 @@ interface MaterialOpt { id: string; name: string; base_unit: string; unit_cost_p
 interface DepOpt { id: string; asset_name: string; method: string; cost_per_use: number | null; cost_per_unit: number | null; }
 interface GroupOpt { id: string; name: string; }
 
-const RECIPE_TYPES = ['SUBRECETA', 'MOLDE', 'FIGURA', 'ETIQUETA', 'EMPAQUE', 'OTRO'];
+const RECIPE_TYPES = ['SUBRECETA', 'BASE / MEZCLA', 'COMPONENTE', 'EMPAQUE', 'OTRO'];
 
 const EMPTY_LINE = (): IngLine => ({
   kind: 'MATERIAL',
@@ -81,6 +81,7 @@ export default function RecetasN1Tab() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [groups, setGroups] = useState<GroupOpt[]>([]);
 
+  const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -188,8 +189,13 @@ export default function RecetasN1Tab() {
   );
 
   const filtered = useMemo(() => recipes.filter((r) => {
-    return (!filterType || r.recipe_type === filterType) && (!filterGroup || r.group_id === filterGroup);
-  }), [recipes, filterType, filterGroup]);
+    const matchSearch = !search ||
+      r.name.toLowerCase().includes(search.toLowerCase()) ||
+      (r.code ?? '').toLowerCase().includes(search.toLowerCase());
+    const matchType = !filterType || r.recipe_type === filterType;
+    const matchGroup = !filterGroup || r.group_id === filterGroup;
+    return matchSearch && matchType && matchGroup;
+  }), [recipes, search, filterType, filterGroup]);
 
   const byType = useMemo(() => {
     const map = new Map<string, RecipeN1[]>();
@@ -346,17 +352,25 @@ export default function RecetasN1Tab() {
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Filtrar:</label>
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900">
-            <option value="">Todos los tipos</option>
-            {RECIPE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="relative min-w-[200px] max-w-xs flex-1">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar subreceta, código..."
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
+            />
+          </div>
           <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900">
+            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
             <option value="">Todos los grupos</option>
             {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+            <option value="">Todos los tipos</option>
+            {RECIPE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div className="flex gap-2">

@@ -5,7 +5,7 @@
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Plus, Edit2, Trash2, Eye, RefreshCw, Star, Calculator,
+  Plus, Search, Edit2, Trash2, Eye, RefreshCw, Star, Calculator,
   AlertTriangle, Package, Layers, X,
 } from 'lucide-react';
 import {
@@ -56,7 +56,7 @@ interface DepOpt { id: string; asset_name: string; method: string; cost_per_use:
 interface RecipeN1Opt { id: string; name: string; code: string | null; total_cost: number; yield_qty: number; yield_unit: string; }
 interface GroupOpt { id: string; name: string; }
 
-const RECIPE_TYPES_N2 = ['PRODUCTO', 'FIGURA', 'VELA', 'KIT', 'OTRO'];
+const RECIPE_TYPES_N2 = ['PRODUCTO ESTÁNDAR', 'KIT / COMBO', 'PERSONALIZADO', 'OTRO'];
 
 const EMPTY_LINE = (): IngLine => ({
   kind: 'MATERIAL',
@@ -90,7 +90,9 @@ export default function RecetasN2Tab() {
   const [deleting, setDeleting] = useState<RecipeN2 | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Filtro de la tabla (independiente del formulario)
+  // Filtros de la tabla
+  const [search, setSearch] = useState('');
+  const [filterGroup, setFilterGroup] = useState('');
   const [filterType, setFilterType] = useState('');
 
   // Form
@@ -207,10 +209,17 @@ export default function RecetasN2Tab() {
     return fp > 0 ? ((fp - liveTotalCost) / fp) * 100 : 0;
   }, [ffinalPrice, liveSuggestedPrice, liveTotalCost]);
 
-  // Lista filtrada por tipo para la tabla
+  // Lista filtrada para la tabla
   const filteredRecipes = useMemo(
-    () => recipes.filter((r) => !filterType || r.recipe_type === filterType),
-    [recipes, filterType],
+    () => recipes.filter((r) => {
+      const matchSearch = !search ||
+        r.name.toLowerCase().includes(search.toLowerCase()) ||
+        (r.code ?? '').toLowerCase().includes(search.toLowerCase());
+      const matchType = !filterType || r.recipe_type === filterType;
+      const matchGroup = !filterGroup || r.group_id === filterGroup;
+      return matchSearch && matchType && matchGroup;
+    }),
+    [recipes, search, filterType, filterGroup],
   );
 
   const openCreate = () => {
@@ -357,10 +366,23 @@ export default function RecetasN2Tab() {
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Filtrar por tipo:</label>
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="relative min-w-[200px] max-w-xs flex-1">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar producto, código..."
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
+            />
+          </div>
+          <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+            <option value="">Todos los grupos</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900">
+            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
             <option value="">Todos los tipos</option>
             {RECIPE_TYPES_N2.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
