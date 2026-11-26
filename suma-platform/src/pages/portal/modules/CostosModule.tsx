@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import {
   Calculator, Database, TrendingDown, Layers, Star,
-  Download, Upload,
+  Download, Upload, TrendingUp,
 } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
 import { useIsSuperAdmin } from '@/store/AppStore';
@@ -13,9 +13,10 @@ import BaseMadreTab from './costos/BaseMadreTab';
 import DepreciacionTab from './costos/DepreciacionTab';
 import RecetasN1Tab from './costos/RecetasN1Tab';
 import RecetasN2Tab from './costos/RecetasN2Tab';
+import ProductosVentaTab from './costos/ProductosVentaTab';
 import { ExcelImporterModal } from '@/components/costos/ExcelImporterModal';
 
-type TabId = 'base' | 'depreciacion' | 'n1' | 'n2';
+type TabId = 'base' | 'depreciacion' | 'n1' | 'n2' | 'precios';
 
 interface TabDef {
   id: TabId;
@@ -60,9 +61,18 @@ const TABS: TabDef[] = [
     label: 'Recetas N2',
     shortLabel: 'N2',
     icon: <Star className="w-4 h-4" />,
-    color: 'text-green-600',
-    activeColor: 'bg-green-600',
+    color: 'text-blue-600',
+    activeColor: 'bg-blue-600',
     description: 'Productos finales que vendes. Usan insumos, depreciación y subrecetas N1.',
+  },
+  {
+    id: 'precios',
+    label: 'Productos en Venta',
+    shortLabel: 'Precios / BI',
+    icon: <TrendingUp className="w-4 h-4" />,
+    color: 'text-emerald-600',
+    activeColor: 'bg-emerald-600',
+    description: 'Catálogo de venta final. Configura márgenes de ganancia y visualiza precios de venta con tabla tipo BI.',
   },
 ];
 
@@ -166,6 +176,7 @@ export default function CostosModule() {
         {activeTab === 'depreciacion' && <DepreciacionTab />}
         {activeTab === 'n1' && <RecetasN1Tab />}
         {activeTab === 'n2' && <RecetasN2Tab />}
+        {activeTab === 'precios' && <ProductosVentaTab />}
       </div>
 
       {/* Modal: Importador de plantilla Excel */}

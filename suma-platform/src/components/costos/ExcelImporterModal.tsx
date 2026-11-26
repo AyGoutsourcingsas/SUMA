@@ -3,11 +3,17 @@
 // ============================================================
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Check, ArrowRight, Layers } from 'lucide-react';
+import { Upload, FileSpreadsheet, Check, ArrowRight, Layers, CheckCircle2, Sparkles, Database, TrendingDown, Star } from 'lucide-react';
 import { Button, Modal, Alert, Badge } from '@/components/ui';
 import { formatCOP } from '@/config/brand';
 import { importMaterials, type ImportMaterialRow } from '@/services/modules/inventario';
 import { useActiveCompanyId, useAppStore } from '@/store/AppStore';
+import {
+  analyzeWorkbook,
+  importCompleteWorkbook,
+  type SheetDetection,
+  type MultiSheetSummary,
+} from '@/services/modules/workbookImporter';
 
 interface Props {
   isOpen: boolean;
@@ -60,10 +66,12 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
   const activeCompanyId = useActiveCompanyId();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [step, setStep] = useState<'upload' | 'mapping' | 'preview'>('upload');
+  const [step, setStep] = useState<'upload' | 'multi_sheet' | 'mapping' | 'preview'>('upload');
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [detections, setDetections] = useState<SheetDetection[]>([]);
+  const [multiSummary, setMultiSummary] = useState<MultiSheetSummary | null>(null);
 
   const [headers, setHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<Record<string, any>[]>([]);
@@ -96,6 +104,8 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
       supplier: '',
       stock: '',
     });
+    setDetections([]);
+    setMultiSummary(null);
     setError(null);
     setSaving(false);
   };
@@ -110,15 +120,45 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
         setWorkbook(wb);
         setSheetNames(wb.SheetNames);
 
-        // Preseleccionar hoja típica como "BASE MADRE" o la primera
-        const defaultSheet = wb.SheetNames.find(s => s.toUpperCase().includes('BASE') || s.toUpperCase().includes('MATERIA') || s.toUpperCase().includes('INSUMO')) || wb.SheetNames[0];
-        setSelectedSheet(defaultSheet);
-        parseSheet(wb, defaultSheet);
+        const det = analyzeWorkbook(wb);
+        setDetections(det);
+        const costSheets = det.filter(d => d.type !== 'desconocida');
+
+        if (costSheets.length >= 2) {
+          // Si el archivo tiene múltiples hojas de Costos (Base Madre, Depreciación, Recetas...)
+          setStep('multi_sheet');
+        } else {
+          // Preseleccionar hoja típica como "BASE MADRE" o la primera
+          const defaultSheet = wb.SheetNames.find(s => s.toUpperCase().includes('BASE') || s.toUpperCase().includes('MATERIA') || s.toUpperCase().includes('INSUMO')) || wb.SheetNames[0];
+          setSelectedSheet(defaultSheet);
+          parseSheet(wb, defaultSheet);
+        }
       } catch (err) {
         setError('No se pudo leer el archivo Excel/CSV. Verifica que no esté dañado.');
       }
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  const handleImportAllSheets = async () => {
+    if (!workbook) return;
+    const companyId = activeCompanyId || state.company?.id || localStorage.getItem('suma-active-company') || '';
+    if (!companyId) {
+      setError('Selecciona una empresa activa antes de importar (barra superior).');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await importCompleteWorkbook(companyId, workbook);
+      setMultiSummary(res);
+      onImportSuccess(res.insumos + res.depreciaciones + res.recetasN1 + res.recetasN2);
+    } catch (err: any) {
+      setError(err?.message || 'Error al importar las hojas del archivo Excel.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -362,6 +402,144 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
             >
               Examinar archivo
             </Button>
+          </div>
+        )}
+
+        {/* STEP MULTI-SHEET: Plantilla Completa Detectada */}
+        {step === 'multi_sheet' && (
+          <div className="space-y-6">
+            {!multiSummary ? (
+              <>
+                <div className="bg-suma-50 dark:bg-suma-950/50 border border-suma-200 dark:border-suma-800 rounded-2xl p-5">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Sparkles className="w-6 h-6 text-suma-600" />
+                    <h3 className="font-bold text-base text-gray-900 dark:text-white">
+                      Plantilla Completa de Costos Detectada
+                    </h3>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-300">
+                    Tu archivo contiene múltiples hojas organizadas. El sistema puede importar todo el ecosistema de costos de una sola vez: creará los insumos en Base Madre, los grupos y proveedores que falten, los activos en Depreciación y las recetas de Nivel 1 y Nivel 2.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {detections
+                    .filter((d) => d.type !== 'desconocida')
+                    .map((d) => (
+                      <div
+                        key={d.name}
+                        className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${
+                            d.type === 'base_madre' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' :
+                            d.type === 'depreciacion' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' :
+                            d.type === 'n1_recetas' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' :
+                            'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
+                          }`}>
+                            {d.type === 'base_madre' && <Database className="w-5 h-5" />}
+                            {d.type === 'depreciacion' && <TrendingDown className="w-5 h-5" />}
+                            {d.type === 'n1_recetas' && <Layers className="w-5 h-5" />}
+                            {d.type === 'n2_recetas' && <Star className="w-5 h-5" />}
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm text-gray-900 dark:text-white">
+                              {d.type === 'base_madre' && 'Base Madre (Insumos)'}
+                              {d.type === 'depreciacion' && 'Depreciación'}
+                              {d.type === 'n1_recetas' && 'Recetas Nivel 1'}
+                              {d.type === 'n2_recetas' && 'Recetas Nivel 2'}
+                            </p>
+                            <span className="text-xs text-gray-400 font-mono">Hoja: {d.name}</span>
+                          </div>
+                        </div>
+                        <Badge variant="gray">~{d.count} filas</Badge>
+                      </div>
+                    ))}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const defaultSheet = sheetNames.find(s => s.toUpperCase().includes('BASE') || s.toUpperCase().includes('MATERIA') || s.toUpperCase().includes('INSUMO')) || sheetNames[0];
+                      setSelectedSheet(defaultSheet);
+                      if (workbook) parseSheet(workbook, defaultSheet);
+                    }}
+                    className="text-xs text-gray-500 hover:text-suma-600 underline"
+                  >
+                    O importar solo una hoja manualmente
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" onClick={() => { onClose(); resetState(); }}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleImportAllSheets}
+                      loading={saving}
+                      className="bg-suma-600 hover:bg-suma-700 text-white font-bold"
+                      leftIcon={<Sparkles className="w-4 h-4" />}
+                    >
+                      🚀 Importar Todo el Archivo
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-6 space-y-5">
+                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-300 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                    ¡Plantilla Importada Exitosamente!
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Se han procesado e insertado todos los datos en la base de datos de SUMA.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-lg mx-auto text-left">
+                  <div className="bg-blue-50 dark:bg-blue-950/40 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
+                    <span className="text-xs text-blue-600 font-semibold">Insumos Base Madre</span>
+                    <p className="text-xl font-bold font-mono text-blue-900 dark:text-blue-100">{multiSummary.insumos}</p>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-950/40 p-3 rounded-xl border border-purple-200 dark:border-purple-800">
+                    <span className="text-xs text-purple-600 font-semibold">Depreciaciones</span>
+                    <p className="text-xl font-bold font-mono text-purple-900 dark:text-purple-100">{multiSummary.depreciaciones}</p>
+                  </div>
+                  <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200 dark:border-amber-800">
+                    <span className="text-xs text-amber-600 font-semibold">Recetas N1</span>
+                    <p className="text-xl font-bold font-mono text-amber-900 dark:text-amber-100">{multiSummary.recetasN1}</p>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/40 p-3 rounded-xl border border-green-200 dark:border-green-800">
+                    <span className="text-xs text-green-600 font-semibold">Recetas N2</span>
+                    <p className="text-xl font-bold font-mono text-green-900 dark:text-green-100">{multiSummary.recetasN2}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <span className="text-xs text-gray-500 font-semibold">Grupos Creados</span>
+                    <p className="text-xl font-bold font-mono text-gray-800 dark:text-gray-200">{multiSummary.grupos}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <span className="text-xs text-gray-500 font-semibold">Proveedores</span>
+                    <p className="text-xl font-bold font-mono text-gray-800 dark:text-gray-200">{multiSummary.proveedores}</p>
+                  </div>
+                </div>
+
+                {multiSummary.errors.length > 0 && (
+                  <div className="max-h-24 overflow-y-auto text-xs text-red-500 bg-red-50 dark:bg-red-950 p-2 rounded-lg text-left">
+                    {multiSummary.errors.map((err, i) => <p key={i}>{err}</p>)}
+                  </div>
+                )}
+
+                <Button
+                  size="lg"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                  onClick={() => { onClose(); resetState(); }}
+                >
+                  Finalizar y Ver en Costos
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
