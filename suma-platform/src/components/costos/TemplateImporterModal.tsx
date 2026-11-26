@@ -62,10 +62,10 @@ export function TemplateImporterModal({
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
 
-      const sInsumos = findSheet(wb, 'insumo');
+      const sInsumos = findSheet(wb, 'base_madre') || findSheet(wb, 'base madre') || findSheet(wb, 'insumo') || findSheet(wb, 'materia');
       const sDepr = findSheet(wb, 'depreciacion');
-      const sRecetas = findSheet(wb, 'receta');
-      const sProductos = findSheet(wb, 'producto');
+      const sRecetas = findSheet(wb, 'n1_receta') || findSheet(wb, 'receta');
+      const sProductos = findSheet(wb, 'producto') || findSheet(wb, 'n2_receta');
 
       if (!sInsumos && !sRecetas && !sProductos) {
         setError(`No se encontraron las hojas del template. Hojas del archivo: ${wb.SheetNames.join(', ')}. Usa la plantilla oficial de SUMA.`);

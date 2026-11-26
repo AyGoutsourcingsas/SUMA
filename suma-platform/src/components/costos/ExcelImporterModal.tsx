@@ -7,7 +7,7 @@ import { Upload, FileSpreadsheet, Check, ArrowRight, Layers } from 'lucide-react
 import { Button, Modal, Alert, Badge } from '@/components/ui';
 import { formatCOP } from '@/config/brand';
 import { importMaterials, type ImportMaterialRow } from '@/services/modules/inventario';
-import { useAppStore } from '@/store/AppStore';
+import { useActiveCompanyId, useAppStore } from '@/store/AppStore';
 
 interface Props {
   isOpen: boolean;
@@ -25,17 +25,39 @@ interface ColumnDefinition {
 }
 
 const REQUIRED_FIELDS: ColumnDefinition[] = [
-  { key: 'name', label: 'Nombre del Insumo / Producto', required: true, aliases: ['nombre', 'producto', 'nombre producto', 'descripcion', 'item', 'materia prima'] },
+  { key: 'name', label: 'Nombre del Insumo / Producto', required: true, aliases: ['nombre', 'producto', 'nombre producto', 'descripcion', 'item', 'materia prima', 'material'] },
   { key: 'base_unit', label: 'Unidad Base (Gr, Ml, Und, etc.)', required: true, aliases: ['unidad', 'und', 'medida', 'u.m.', 'unidad de medida', 'base_unit'] },
-  { key: 'unit_cost_per_base', label: 'Costo por Unidad Base', required: true, aliases: ['costo unidad gr/lt/und', 'costo unitario', 'costo unidad', 'costo/unidad', 'valor unitario', 'costo gramo', 'costo gr'] },
+  { key: 'unit_cost_per_base', label: 'Costo por Unidad Base', required: true, aliases: ['costo unidad gr/lt/und', 'costo unitario', 'costo unidad', 'costo/unidad', 'valor unitario', 'costo gramo', 'costo gr', 'costo', 'calc_costo_unidad', 'calc_costo_total', 'calc_costo_promedio', 'costo_total', 'precio', 'valor'] },
   { key: 'sku', label: 'Código / SKU', required: false, aliases: ['sku', 'codigo', 'cod', 'código', 'referencia', 'ref'] },
-  { key: 'group_name', label: 'Grupo / Categoría', required: false, aliases: ['grupo de inventario', 'grupo', 'categoria', 'categoría', 'departamento', 'tipo'] },
-  { key: 'supplier', label: 'Proveedor', required: false, aliases: ['proveedor', 'distribuidor', 'marca', 'comprado en'] },
-  { key: 'stock', label: 'Cantidad / Stock / Peso Inicial', required: false, aliases: ['peso', 'cantidad', 'stock', 'cant', 'existencias', 'saldo'] },
+  { key: 'group_name', label: 'Grupo / Categoría', required: false, aliases: ['grupo', 'grupo de inventario', 'categoria', 'categoría', 'departamento', 'tipo'] },
+  { key: 'supplier', label: 'Proveedor', required: false, aliases: ['proveedor', 'calc_proveedor', 'distribuidor', 'marca', 'comprado en'] },
+  { key: 'stock', label: 'Cantidad / Stock / Peso Inicial', required: false, aliases: ['peso', 'cantidad', 'stock', 'cant', 'existencias', 'saldo', 'calc_peso_ultima_compra'] },
 ];
+
+function parseNumber(v: unknown): number {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  let str = String(v).trim().replace(/[^0-9.,-]/g, '');
+  if (!str) return 0;
+  const lastComma = str.lastIndexOf(',');
+  const lastDot = str.lastIndexOf('.');
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) str = str.replace(/\./g, '').replace(',', '.');
+    else str = str.replace(/,/g, '');
+  } else if (lastComma >= 0) {
+    const parts = str.split(',');
+    str = (parts.length === 2 && parts[1].length <= 2) ? str.replace(',', '.') : str.replace(/,/g, '');
+  } else if (lastDot >= 0) {
+    const parts = str.split('.');
+    str = (parts.length === 2 && parts[1].length <= 2) ? str : str.replace(/\./g, '');
+  }
+  const n = parseFloat(str);
+  return Number.isFinite(n) ? n : 0;
+}
 
 export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) {
   const { state } = useAppStore();
+  const activeCompanyId = useActiveCompanyId();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<'upload' | 'mapping' | 'preview'>('upload');
@@ -78,12 +100,8 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
     setSaving(false);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processFile = (file: File) => {
     setError(null);
-
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
@@ -101,6 +119,11 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
       }
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
   };
 
   const parseSheet = (wb: XLSX.WorkBook, sheetName: string) => {
@@ -222,11 +245,7 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
       if (!name || name === '0' || name.toLowerCase() === 'nan') return null;
 
       const baseUnit = String(row[columnMapping.base_unit] || 'Und').trim();
-      let rawCost = row[columnMapping.unit_cost_per_base];
-      if (typeof rawCost === 'string') {
-        rawCost = rawCost.replace(/\$/g, '').replace(/\./g, '').replace(/,/g, '.').trim();
-      }
-      const unitCost = parseFloat(rawCost) || 0;
+      const unitCost = parseNumber(row[columnMapping.unit_cost_per_base]);
 
       // Si no hay SKU asignado, autogenerar uno legible
       let sku = columnMapping.sku ? String(row[columnMapping.sku] || '').trim() : '';
@@ -237,7 +256,7 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
 
       const groupName = columnMapping.group_name ? String(row[columnMapping.group_name] || '').trim() : '';
       const supplier = columnMapping.supplier ? String(row[columnMapping.supplier] || '').trim() : '';
-      const stockVal = columnMapping.stock ? parseFloat(row[columnMapping.stock]) || 0 : 0;
+      const stockVal = parseNumber(row[columnMapping.stock]);
 
       const item: ImportMaterialRow = {
         sku,
@@ -257,7 +276,7 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
       setError('No se encontraron filas válidas para importar.');
       return;
     }
-    const companyId = state.company?.id;
+    const companyId = activeCompanyId || state.company?.id || localStorage.getItem('suma-active-company') || '';
     if (!companyId) {
       setError('Selecciona una empresa activa antes de importar (barra superior).');
       return;
@@ -311,13 +330,23 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
 
         {/* STEP 1: Upload */}
         {step === 'upload' && (
-          <div className="text-center py-10 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl hover:border-suma-500 transition-colors">
+          <div
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const file = e.dataTransfer.files?.[0];
+              if (file) processFile(file);
+            }}
+            className="text-center py-10 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl hover:border-suma-500 transition-colors cursor-pointer"
+            onClick={() => fileInputRef.current?.click()}
+          >
             <FileSpreadsheet className="w-16 h-16 text-suma-600 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-              Selecciona tu archivo de insumos
+              Arrastra o selecciona tu archivo de plantilla Excel
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-6">
-              Sube tu hoja de cálculo (.xlsx, .xls o .csv). Puede ser tu "BASE MADRE", catálogo de proveedores o lista de ingredientes.
+              Sube tu hoja de cálculo (.xlsx, .xls o .csv). Los grupos y proveedores nuevos se crearán automáticamente.
             </p>
             <input
               type="file"
@@ -329,7 +358,7 @@ export function ExcelImporterModal({ isOpen, onClose, onImportSuccess }: Props) 
             <Button
               size="lg"
               leftIcon={<Upload className="w-4 h-4" />}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
             >
               Examinar archivo
             </Button>

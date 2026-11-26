@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import {
   Calculator, Database, TrendingDown, Layers, Star,
-  Download,
+  Download, Upload,
 } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
 import { useIsSuperAdmin } from '@/store/AppStore';
@@ -13,6 +13,7 @@ import BaseMadreTab from './costos/BaseMadreTab';
 import DepreciacionTab from './costos/DepreciacionTab';
 import RecetasN1Tab from './costos/RecetasN1Tab';
 import RecetasN2Tab from './costos/RecetasN2Tab';
+import { ExcelImporterModal } from '@/components/costos/ExcelImporterModal';
 
 type TabId = 'base' | 'depreciacion' | 'n1' | 'n2';
 
@@ -68,6 +69,8 @@ const TABS: TabDef[] = [
 export default function CostosModule() {
   const isSuperAdmin = useIsSuperAdmin();
   const [activeTab, setActiveTab] = useState<TabId>('base');
+  const [showExcelImporter, setShowExcelImporter] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const tab = TABS.find((t) => t.id === activeTab)!;
 
@@ -93,6 +96,13 @@ export default function CostosModule() {
             leftIcon={<Download className="w-4 h-4" />}
           >
             Descargar plantilla
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setShowExcelImporter(true)}
+            leftIcon={<Upload className="w-4 h-4" />}
+          >
+            Subir plantilla Excel
           </Button>
         </div>
       </div>
@@ -151,12 +161,22 @@ export default function CostosModule() {
       </div>
 
       {/* ── Contenido de la pestaña ── */}
-      <div>
+      <div key={refreshKey}>
         {activeTab === 'base' && <BaseMadreTab />}
         {activeTab === 'depreciacion' && <DepreciacionTab />}
         {activeTab === 'n1' && <RecetasN1Tab />}
         {activeTab === 'n2' && <RecetasN2Tab />}
       </div>
+
+      {/* Modal: Importador de plantilla Excel */}
+      <ExcelImporterModal
+        isOpen={showExcelImporter}
+        onClose={() => setShowExcelImporter(false)}
+        onImportSuccess={() => {
+          setActiveTab('base');
+          setRefreshKey((k) => k + 1);
+        }}
+      />
     </div>
   );
 }

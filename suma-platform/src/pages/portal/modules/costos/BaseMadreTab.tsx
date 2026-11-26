@@ -14,6 +14,7 @@ import { useActiveCompanyId, useCanEdit } from '@/store/AppStore';
 import { formatCOP } from '@/config/brand';
 import { supabase } from '@/services/supabase';
 import type { Unit } from '@/types/domain';
+import { ExcelImporterModal } from '@/components/costos/ExcelImporterModal';
 
 // ── Tipos ──────────────────────────────────────────────────
 interface MaterialRow {
@@ -91,10 +92,8 @@ export default function BaseMadreTab() {
   const [newSupplierPhone, setNewSupplierPhone] = useState('');
   const [supplierSaving, setSupplierSaving] = useState(false);
 
-  // Importador masivo simple (CSV / Excel pegado)
+  // Importador masivo Excel / CSV
   const [showImporter, setShowImporter] = useState(false);
-  const [csvText, setCsvText] = useState('');
-  const [importPreview, setImportPreview] = useState<Partial<MaterialRow>[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -296,68 +295,6 @@ export default function BaseMadreTab() {
       return null;
     } finally {
       setSupplierSaving(false);
-    }
-  };
-
-  // Parseo básico de CSV pegado
-  const parseCSV = (text: string) => {
-    const lines = text.trim().split('\n').filter(Boolean);
-    if (lines.length < 2) { setImportPreview([]); return; }
-    // Detectar separador
-    const sep = lines[0].includes('\t') ? '\t' : ',';
-    const headers = lines[0].split(sep).map((h) => h.trim().toLowerCase().replace(/\s+/g, '_'));
-    const rows: Partial<MaterialRow>[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const vals = lines[i].split(sep);
-      const obj: any = {};
-      headers.forEach((h, idx) => { obj[h] = vals[idx]?.trim() ?? ''; });
-      rows.push({
-        code: obj.codigo || obj.code || null,
-        name: obj.nombre || obj.name || obj.insumo || obj.material || '',
-        base_unit: obj.unidad || obj.base_unit || obj.unit || 'g',
-        unit_cost_per_base: parseFloat(obj.costo || obj.costo_por_unidad || obj.unit_cost || '0') || 0,
-        stock: parseFloat(obj.stock || obj.cantidad || '0') || 0,
-        stock_min: parseFloat(obj.stock_min || obj.minimo || '0') || 0,
-        group_name: obj.grupo || obj.group || '',
-        supplier_name: obj.proveedor || obj.supplier || '',
-        notes: obj.notas || obj.notes || '',
-      });
-    }
-    setImportPreview(rows);
-  };
-
-  const handleImport = async () => {
-    if (!companyId || importPreview.length === 0) return;
-    setSaving(true);
-    setError(null);
-    try {
-      // Resolver group_id por nombre
-      const rows = importPreview.map((r) => {
-        const g = groups.find((g) => g.name.toLowerCase() === (r.group_name ?? '').toLowerCase());
-        const s = suppliers.find((s) => s.name.toLowerCase() === (r.supplier_name ?? '').toLowerCase());
-        return {
-          company_id: companyId,
-          code: r.code || null,
-          name: r.name || 'Sin nombre',
-          base_unit: r.base_unit || 'g',
-          unit_cost_per_base: r.unit_cost_per_base || 0,
-          group_id: g?.id || null,
-          supplier_id: s?.id || null,
-          stock: r.stock || 0,
-          stock_min: r.stock_min || 0,
-          notes: r.notes || null,
-        };
-      });
-      const { error: err } = await supabase.from('materials').insert(rows);
-      if (err) throw err;
-      setShowImporter(false);
-      setCsvText('');
-      setImportPreview([]);
-      await load();
-    } catch (e: any) {
-      setError(e.message || 'Error importando.');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -687,65 +624,12 @@ export default function BaseMadreTab() {
         </div>
       </Modal>
 
-      {/* Modal: Importador masivo CSV */}
-      <Modal isOpen={showImporter} onClose={() => { setShowImporter(false); setCsvText(''); setImportPreview([]); }} title="Importar insumos (CSV / Excel pegado)" size="2xl">
-        <div className="p-6 space-y-4">
-          <Alert type="info">
-            <strong>Columnas esperadas:</strong> codigo, nombre, unidad, costo, stock, stock_min, grupo, proveedor, notas<br />
-            Separa con coma o tabulación. La primera fila es el encabezado.
-          </Alert>
-          <label className="block">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">Pega aquí el contenido del CSV o Excel</span>
-            <textarea
-              value={csvText}
-              onChange={(e) => { setCsvText(e.target.value); parseCSV(e.target.value); }}
-              rows={8}
-              placeholder={'codigo\tnombre\tunidad\tcosto\tstock\tstock_min\tgrupo\tproveedor\nINS-001\tCera de soya\tg\t8\t5000\t500\tCERAS\tProveedor ABC'}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-mono bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-suma-500"
-            />
-          </label>
-
-          {importPreview.length > 0 && (
-            <div>
-              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                Vista previa — {importPreview.length} registros
-              </p>
-              <div className="overflow-x-auto max-h-48 rounded border border-gray-200 dark:border-gray-700">
-                <table className="suma-table text-xs">
-                  <thead>
-                    <tr><th>Código</th><th>Nombre</th><th>Unidad</th><th>Costo</th><th>Stock</th><th>Grupo</th><th>Proveedor</th></tr>
-                  </thead>
-                  <tbody>
-                    {importPreview.map((r, i) => (
-                      <tr key={i}>
-                        <td>{r.code || '—'}</td>
-                        <td className={!r.name ? 'text-red-500' : ''}>{r.name || '¡Falta nombre!'}</td>
-                        <td>{r.base_unit}</td>
-                        <td className="font-mono">{formatCOP(r.unit_cost_per_base ?? 0)}</td>
-                        <td>{r.stock}</td>
-                        <td>{r.group_name || '—'}</td>
-                        <td>{r.supplier_name || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => { setShowImporter(false); setCsvText(''); setImportPreview([]); }}>Cancelar</Button>
-            <Button
-              onClick={handleImport}
-              loading={saving}
-              disabled={importPreview.length === 0}
-              leftIcon={<Upload className="w-4 h-4" />}
-            >
-              Importar {importPreview.length > 0 ? `(${importPreview.length} ítems)` : ''}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Modal: Importador masivo Excel / CSV */}
+      <ExcelImporterModal
+        isOpen={showImporter}
+        onClose={() => setShowImporter(false)}
+        onImportSuccess={() => load()}
+      />
 
       {/* Modal: Crear grupo */}
       <Modal isOpen={showGroupModal} onClose={() => setShowGroupModal(false)} title="Nuevo grupo de insumos" size="sm">
